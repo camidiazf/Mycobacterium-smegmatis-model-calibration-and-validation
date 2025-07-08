@@ -3,6 +3,16 @@ import pandas as pd
 
 
 def system_info(condition):
+    """
+    Function to retrieve system information based on the experimental condition.
+    Parameters:
+        - condition: str, the experimental condition (e.g., 'Normal').
+    Returns:
+        - A dictionary containing variable names, parameters, constants, initial conditions for simulation and experimental data, and time stamps.
+    
+    This function sets up the system parameters, initial conditions, and experimental data for the specified condition.
+    
+    """
 
     # Variable names
     var_names = ['X', 'C', 'N', 'pH']
@@ -12,22 +22,21 @@ def system_info(condition):
     n_steps = 500
     time_stamps_sim = np.linspace(0, tf, n_steps + 1)
 
-
     # Original parameters
     parameters = {
-        'k_C': 0.08, #
-        'k_N': 0.01, #
-        'k_O' : 0.001, #
-        'k_d': 0.001, #
-        'YX_CO2': 0.35, #
+        'k_C': 0.08, 
+        'k_N': 0.01, 
+        'k_O' : 0.001, 
+        'k_d': 0.001, 
+        'YX_CO2': 0.35, 
         'YX_O2' : 1.352, 
         'YX_C': 0.484,
         'YX_N': 21.575,
         'Xmax': 1.4462,  
-        'mu_max': 0.15, #0.19
-        'pH_LL': 4.6, #
+        'mu_max': 0.15,
+        'pH_LL': 4.6, 
         'pH_UL': 7.4,
-        'I_val': 3, #
+        'I_val': 3, 
         'O2_sat' : 0.007267,
         } 
 
@@ -121,67 +130,3 @@ def system_info(condition):
 
     }
     
-    
-
-        # n.init.ph46_c = [0.222 5.620 1.019 0.439/1000]; %pH 4.6 initial concentrations
-        # n.init.ph55_c = [0.226 5.225 0.974 0.439/1000];
-
-
-
-
-        # %Initial conditions
-        # n.init.amm_rc = [0.222 5.511 0.032 0.439/1000]; %Amm-def (repetition) initial concentrations
-        # n.init.ammgly_c = [0.229 1.132 0.037 0.439/1000]; %Amm & gly-def initial concentrations
-        # n.init.ammsp_c = [0.227 5.352 0.028 0.439/1000]; %Amm-def spiking initial concentrations
-        # n.init.glysp_c = [0.224 1.078 0.972 0.439/1000]; %Gly-def spiking initial concentrations
-
-
-
-
-
-
-        
-    # elif condition == 'Amm_def':
-    #     # Experimental data
-    #     df_exp = pd.read_excel('Experimental_data.xlsx', sheet_name='PE_Glyc_def')
-    #     df_val = pd.read_excel('Experimental_data.xlsx', sheet_name='PV_Glyc_def')
-
-    #     # Initial conditions simulation
-    #     X0 = 0.224
-    #     c0 = 6.057
-    #     n0 = 0.036
-    #     co20 = 0.439 / 1000
-    #     o20 = constants['O2_sat']
-    #     z0 = 7.2
-    #     x0_sim = np.array([X0, c0, n0, co20, o20, z0])
-
-    #     # Initial conditions simulation validation
-    #     X0 = 0.222
-    #     c0 = 5.511
-    #     n0 = 0.032
-    #     co20 = 0.439 / 1000
-    #     o20 = constants['O2_sat']
-    #     z0 = 7.2
-    #     x0_sim_v = np.array([X0, c0, n0, co20, o20, z0])
-
-
-    #     # Initial conditions experimental
-    #     X0 = df_exp['Biomass (g/L)'][0]  
-    #     c0 = df_exp['Glycerol (g/L)'][0] 
-    #     n0 = df_exp['Ammonia (g/L)'][0] 
-    #     co20 = df_exp['CO2'][0]  # CO2 concentration in g/L
-    #     o20 = constants['O2_sat']  # O2 saturation in g/L
-    #     z0 = df_exp['pH'][0]  
-    #     x0_exp = np.array([X0, c0, n0, co20, o20, z0])
-
-    #     # Experimental time parameters
-    #     t_exp = df_exp['Time (Hours)']
-
-    #     # Weights for experimental data
-    #     weights_exp_stack = np.vstack([
-    #                         df_exp.iloc[:, 2],
-    #                         df_exp.iloc[:, 5],
-    #                         df_exp.iloc[:, 8],
-    #                         df_exp.iloc[:, 11]
-    #                     ]).T
-

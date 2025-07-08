@@ -4,21 +4,39 @@ import copy
 import time
 
 
-### Agregar mas que solo PSO, q admitan restricciones
-## Avisar si se llega a limites
-
 from mealpy import FloatVar, PSO # type: ignore
 from mealpy.utils.problem import FloatVar # type: ignore
 from mealpy.swarm_based import PSO # type: ignore
 
 from System_info import system_info
-from DAE_Systems_Simulations import simulate_model, simulate_model_calibrating
+from DAE_Systems_Simulations import simulate_model
 from Analysis_functions import compute_validation, parameter_analysis
 
 
-
-
 def RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_list, lb, ub):
+    """
+    Main function to run the DAE system simulation and calibration/validation process.
+    Parameters:
+        - iteration: int, the current iteration number (0 for initial run, >0 for optimization).
+        - condition: str, the experimental condition (e.g., 'Normal').
+        - perturbation: float/int, the type of perturbation applied to the system.
+        - correlation_threshold: float, threshold for correlation analysis.
+        - params_list: list, list of parameters to calibrate.
+        - lb: list, lower bounds for the parameters to calibrate.
+        - ub: list, upper bounds for the parameters to calibrate.
+    Returns:
+        - final_results: DataFrame, containing the results of the calibration/validation process.
+    
+    This function performs the following steps:
+    1. Retrieves system data based on the specified condition.
+    2. Simulates the model using the original parameters and validation data.
+    3. If iteration is 0, computes initial validation results and performs parameter analysis.
+    4. If iteration > 0, performs PSO optimization to calibrate the model parameters.
+    5. Simulates the model with the new parameters and computes validation results.
+    6. Returns a DataFrame with the final results, including updated parameters, validation metrics, and t-values.
+
+    Note: The function assumes that the necessary data files and system information are available in the specified format.
+    """
 
     system_data = system_info(condition)
 
@@ -47,7 +65,11 @@ def RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_l
     # ORIGINAL SIMULATION USING VALIDATION DATA
     y_exp = [X_exp, C_exp, N_exp, ph_exp]
     y_val = [X_exp_v, C_exp_v, N_exp_v, ph_exp_v]
-    original_sol = simulate_model(x0_sim_v, parameters_og, constants, t_exp_v)
+    original_sol = simulate_model(simulation_type='normal', 
+                                            x0=x0_sim_v, 
+                                            parameters=parameters_og, 
+                                            constants=constants, 
+                                            time=t_exp_v)
     y_sim_og = [original_sol['X'], original_sol['C'], original_sol['N'], original_sol['pH']]
     params_list_og = list(parameters_og.keys())
 
@@ -92,7 +114,14 @@ def RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_l
 
         def cost_function(p_vars): # COST FUNCTION USING PE DATA
             try:
-                df_results = simulate_model_calibrating(p_vars, x0_exp, parameters_og, constants, params_list, t_exp)
+                df_results = simulate_model(simulation_type='calibrating', 
+                                            x0=x0_exp, 
+                                            parameters=parameters_og, 
+                                            constants=constants, 
+                                            time=t_exp,
+                                            p_vars=p_vars,
+                                            param_list=params_list
+                                        )
 
                 X_sim, C_sim, N_sim, pH_sim = df_results['X'], df_results['C'], df_results['N'], df_results['pH']
 
@@ -144,9 +173,6 @@ def RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_l
                 i += 1
             
 
-
-
-
         df_new_params = pd.DataFrame({
             "Parámetro": params_list,
             "original": [parameters_og[key] for key in params_list],
@@ -154,7 +180,11 @@ def RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_l
         print(df_new_params)
 
         df_parameters_updated = pd.DataFrame([param_dict])
-        new_sol = simulate_model(x0_sim_v, parameters_updated, constants, t_exp_v) 
+        new_sol = simulate_model(simulation_type='normal', 
+                                x0=x0_sim_v, 
+                                parameters=parameters_updated, 
+                                constants=constants, 
+                                time=t_exp_v)
 
     # NEW SIMULATION USING VALIDATION DATA
         y_sim_new = [new_sol['X'], new_sol['C'], new_sol['N'], new_sol['pH']]

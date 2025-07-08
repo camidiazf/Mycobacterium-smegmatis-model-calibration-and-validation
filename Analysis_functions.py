@@ -9,12 +9,32 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns # type: ignore
 
-from DAE_Systems_Simulations import simulate_model
 from System_info import system_info
 from Aux_Functions import compute_sensitivity, compute_FIM, compute_t_values, residuals, rmse, nrmse, mape, aic_bic, plotting_comparison
 
 
 def compute_validation(y_exp, y_val, y_sim_og, var_names, params_list_og, y_sim_new = None, type = None):
+    """
+    Function to compute the validation metrics for the model.
+    Parameters:
+        - y_exp: list, experimental data for comparison.
+        - y_val: list, validation data.
+        - y_sim_og: list, original simulated data.
+        - var_names: list, names of the variables in the model.
+        - params_list_og: list, list of original parameters.
+        - y_sim_new: list, new simulated data (optional).
+        -type: str, type of validation ('initial' for initial validation, 'new' for new validation).
+    Returns:
+        - validation_final_results: DataFrame, containing the validation metrics for each variable and the model.
+    This function performs the following steps:
+        1. Initializes a DataFrame to store validation results.
+        2. Computes residuals for each variable and the model.
+        3. Calculates RMSE, MAPE, and NRMSE for each variable.
+        4. Computes AIC and BIC for the model.
+        5. Performs residual analysis using the Anderson-Darling test and Durbin-Watson test.
+        6. Plots histograms and normal probability plots of the residuals.
+        7. Returns a DataFrame with the final validation results.
+    """
 
     print("                                ----------------------------------------------")
     print("                                ------- Validation - Residual Analysis -------")
@@ -62,8 +82,6 @@ def compute_validation(y_exp, y_val, y_sim_og, var_names, params_list_og, y_sim_
 
         
         res = res_model
-
-
 
     else:
         validacion_estados = {}
@@ -155,6 +173,30 @@ def compute_validation(y_exp, y_val, y_sim_og, var_names, params_list_og, y_sim_
 
 
 def parameter_analysis(condition, perturbation, correlation_threshold, original_sol, params_list = None, parameters_updated = None, new_sol = None, type = None, delta=1e-4):
+    """
+    Function to perform parameter analysis for the system.
+    Parameters:
+        - condition: str, the experimental condition (e.g., 'Normal').
+        - perturbation: float, the perturbation value for sensitivity analysis.
+        - correlation_threshold: float, threshold for correlation in FIM computation.
+        - original_sol: dict, original solution from the simulation.
+        - params_list: list, list of parameters to be analyzed (optional).
+        - parameters_updated: dict, updated parameters for the system (optional).
+        - new_sol: dict, new solution from the simulation (optional).
+        - type: str, type of analysis ('initial' for initial analysis, 'new' for new analysis).
+        - delta: float, small perturbation value for sensitivity analysis.
+    Returns:
+        - t_values: DataFrame, containing the t-values for the parameters.
+    This function performs the following steps:
+        1. Retrieves system data based on the specified condition.
+        2. Computes sensitivity analysis using the original parameters and simulation data.
+        3. Computes the Fisher Information Matrix (FIM) using the original parameters and experimental data.
+        4. Computes t-values for the parameters based on the FIM.
+        5. If type is 'initial', plots comparison of original solution with experimental data.
+        6. If type is 'new', plots comparison of new solution with experimental data.
+        7. Returns a DataFrame with the t-values for the parameters.
+    
+    """
     
     print(" ")
     print(" ")
