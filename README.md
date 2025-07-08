@@ -18,6 +18,7 @@ This repository contains a suite of Python scripts and utilities for simulating,
 ## Overview
 
 The repository models the growth dynamics of a bioprocess (e.g., microbial or cell culture) using DAEs. It provides tools for:
+
 - Simulating system dynamics given initial conditions and parameters
 - Calibrating model parameters against experimental data
 - Performing sensitivity and Fisher Information Matrix (FIM) analyses
@@ -27,56 +28,60 @@ The repository models the growth dynamics of a bioprocess (e.g., microbial or ce
 
 ```
 .
-├── Analysis_funcions.py         # Parameter analysis and validation functions
-├── Aux_functions.py             # Utility functions: statistics, plotting, sensitivity, FIM, etc.
+├── Analysis_functions.py        # Parameter analysis and validation functions
+├── Aux_Functions.py             # Utility functions: statistics, plotting, sensitivity, FIM, etc.
 ├── Dae_System_run.py            # Main entry point for running simulations and calibrations
 ├── Dae_Systems_Simulations.py   # DAE system definition and simulation routines
 ├── Experimental_data.xlsx       # Experimental data for calibration/validation
-├── Main.ipynb                   # Example notebook for interactive use
+├── Main.ipynb                   # Interactive notebook for local execution
+├── Main_Collab.ipynb             # Google Colab notebook to reproduce the full pipeline
 ├── System_info.py               # System configuration, parameters, and initial conditions
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
 ```
 
 ## Main Features
 
-- **DAE System Simulation:** Simulates bioprocess dynamics using symbolic computation (CasADi).
-- **Parameter Estimation:** Calibrates model parameters using Particle Swarm Optimization (PSO) or other optimizers.
-- **Sensitivity Analysis:** Quantifies the impact of parameters on model outputs.
-- **FIM Analysis:** Computes parameter identifiability and correlations.
-- **Visualization:** Plots simulation results vs. experimental data for validation.
-- **Statistical Metrics:** Computes RMSE, MAPE, AIC/BIC, and more.
+- **DAE System Simulation:** Simulate bioprocess dynamics using symbolic computation (CasADi).
+- **Parameter Estimation:** Calibrate model parameters using Particle Swarm Optimization (PSO) or other optimizers.
+- **Sensitivity Analysis:** Quantify the impact of parameters on model outputs.
+- **FIM Analysis:** Compute parameter identifiability and correlations.
+- **Visualization:** Plot simulation results vs. experimental data for validation.
+- **Statistical Metrics:** Compute RMSE, MAPE, AIC/BIC, and more.
 
 ## Installation
 
 1. Clone the repository:
+
    ```bash
    git clone <repo_url>
    cd <repo_folder>
    ```
 
-2. Install dependencies (recommend using a virtual environment):
+2. Install dependencies (using a virtual environment is recommended):
+
    ```bash
    pip install -r requirements.txt
    ```
 
-   **Main dependencies:**
-   - numpy
-   - pandas
-   - matplotlib
-   - seaborn
-   - scipy
-   - statsmodels
-   - casadi
-   - mealpy
-
 ## Usage
 
-### 1. Interactive Notebook
+### 1. Interactive Notebook (Local)
 
 Open `Main.ipynb` for a step-by-step example of model simulation, calibration, and analysis.
 
-### 2. Script Execution
+### 2. Google Colab
 
-The main entry point for running simulations and calibrations is `Dae_System_run.py`. Example usage:
+Open `Main_Collab.ipynb` in Google Colab. This notebook will:
+
+1. Clone the repository
+2. Install all required packages
+3. Configure imports
+4. Run the full calibration and analysis pipeline in the cloud
+
+### 3. Script Execution
+
+You can also invoke the pipeline directly from Python scripts:
 
 ```python
 from Dae_System_run import RUN_MAIN
@@ -87,42 +92,44 @@ condition = "default"
 perturbation = 0.01
 correlation_threshold = 0.85
 params_list = ["k_C", "k_N", ...]  # Parameters to calibrate
-lb = [0.01, 0.001, ...]            # Lower bounds
-ub = [0.2, 0.1, ...]               # Upper bounds
+lb = [0.01, 0.001, ...]                # Lower bounds
+ub = [0.2, 0.1, ...]                   # Upper bounds
 
 RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_list, lb, ub)
 ```
 
 ## File Descriptions
 
-- **System_info.py**  
+- **System\_info.py**\
   Defines system parameters, constants, variable names, and initial conditions for simulations and experiments.
 
-- **Dae_Systems_Simulations.py**  
-  Contains the DAE system definition (`DAE_system`, `DAE_system_calibrating`) and simulation routines (`simulate_model`, `simulate_model_calibrating`).
+- **Dae\_Systems\_Simulations.py**\
+  Contains the DAE system definitions and simulation routines (`simulate_model`, `simulate_model_calibrating`).
 
-- **Dae_System_run.py**  
-  Main orchestration script. Handles parameter estimation, runs simulations, and manages optimization routines.
+- **Dae\_System\_run.py**\
+  Main orchestration script. Handles parameter estimation, simulation runs, and optimization workflows.
 
-- **Aux_functions.py**  
-  Utility functions for:
-  - Statistical metrics (RMSE, MAPE, AIC/BIC)
-  - Sensitivity and FIM analysis
-  - Residuals and t-value computations
-  - Plotting and visualization
+- **Aux\_Functions.py**\
+  Utility routines for statistical metrics, sensitivity and FIM analysis, residuals, t-value computations, and plotting.
 
-- **Analysis_funcions.py**  
-  Functions for parameter analysis and model validation.
+- **Analysis\_functions.py**\
+  Additional functions for parameter analysis and model validation.
 
-- **Experimental_data.xlsx**  
-  Contains experimental data for model calibration and validation.
+- **Main.ipynb**\
+  Jupyter notebook for interactive exploration and local execution of the calibration pipeline.
 
-- **Main.ipynb**  
-  Jupyter notebook for interactive exploration, running simulations, and visualizing results.
+- **Main\Collab.ipynb**\
+  Google Colab notebook to run the entire pipeline in a cloud environment, with automated setup steps.
+
+- **Experimental\_data.xlsx**\
+  Experimental measurements used for model calibration and validation.
+
+- **requirements.txt**\
+  Lists all Python dependencies required to run the code.
 
 ## Dependencies
 
-A sample `requirements.txt` (please update according to your environment):
+The `requirements.txt` should include:
 
 ```
 numpy
@@ -138,11 +145,8 @@ openpyxl
 
 ---
 
-**Note:**  
-- Adjust parameter lists, bounds, and conditions in your scripts as needed for your specific system.
-- For further customization or advanced analysis, refer to the docstrings and comments within each script.
+**Notes:**
 
-- Codes still being updated
-- Paper and origin of experimental data to be published shortly
-
----
+- Update parameter lists, bounds, and configurations in your scripts as needed for your specific system.
+- Refer to docstrings in each module for detailed usage.
+- Experimental data origin and publication details will be added soon.
