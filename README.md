@@ -34,7 +34,7 @@ The repository models the growth dynamics of a bioprocess (e.g., microbial or ce
 ├── Dae_Systems_Simulations.py   # DAE system definition and simulation routines
 ├── Experimental_data.xlsx       # Experimental data for calibration/validation
 ├── Main.ipynb                   # Interactive notebook for local execution
-├── Main_Collab.ipynb             # Google Colab notebook to reproduce the full pipeline
+├── Main_Collab.ipynb             # Google Collab notebook to reproduce the full pipeline
 ├── System_info.py               # System configuration, parameters, and initial conditions
 ├── requirements.txt             # Python dependencies
 └── README.md                    # This file
@@ -70,9 +70,9 @@ The repository models the growth dynamics of a bioprocess (e.g., microbial or ce
 
 Open `Main.ipynb` for a step-by-step example of model simulation, calibration, and analysis.
 
-### 2. Google Colab
+### 2. Google Collab
 
-Open `Main_Collab.ipynb` in Google Colab. This notebook will:
+Open `Main_Collab.ipynb` in Google Collab. This notebook will:
 
 1. Clone the repository
 2. Install all required packages
@@ -118,8 +118,8 @@ RUN_MAIN(iteration, condition, perturbation, correlation_threshold, params_list,
 - **Main.ipynb**\
   Jupyter notebook for interactive exploration and local execution of the calibration pipeline.
 
-- **Main\Collab.ipynb**\
-  Google Colab notebook to run the entire pipeline in a cloud environment, with automated setup steps.
+- **Main\_Collab.ipynb**\
+  Google Collab notebook to run the entire pipeline in a cloud environment, with automated setup steps.
 
 - **Experimental\_data.xlsx**\
   Experimental measurements used for model calibration and validation.
@@ -148,5 +148,4 @@ openpyxl
 **Notes:**
 
 - Update parameter lists, bounds, and configurations in your scripts as needed for your specific system.
-- Refer to docstrings in each module for detailed usage.
 - Experimental data origin and publication details will be added soon.
