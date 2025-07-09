@@ -13,10 +13,10 @@ from System_info import system_info
 from DAE_Systems_Simulations import simulate_model
 from Analysis_functions import validation_analysis, parameter_analysis, plotting_comparison
 
-def RUN_MAIN(iterations, path, condition, perturbation, delta, correlation_threshold, params_list, lb, ub):
+def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, params_list, lb, ub):
     if os.path.exists(path):
         os.remove(path)
-        print(f">>> Existing file {path!r} removed – starting fresh")
+        print(f">>> Existing file {path!r} removed | starting fresh")
 
     df = pd.DataFrame()
     print(">>> Starting with empty DataFrame")
@@ -30,7 +30,6 @@ def RUN_MAIN(iterations, path, condition, perturbation, delta, correlation_thres
         print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
         print("")
         Results = RUN_DAE_CALIBRATION(iteration = i, 
-                                condition = condition,
                                 perturbation = perturbation, 
                                 delta = delta,
                                 correlation_threshold = correlation_threshold, 
@@ -50,22 +49,27 @@ def RUN_MAIN(iterations, path, condition, perturbation, delta, correlation_thres
         if i == 0:
             run_name = "Original Model"
         else:
-            run_name = f"Run_{i+1}"
-        Results.insert(0, 'Run', run_name)
+            run_name = f"Model{i+1}"
+        Results.insert(0, 'Model_', run_name)
 
         before = df.shape[0]
         df = pd.concat([df, Results], ignore_index=True)
         after = df.shape[0]
+        print(" ")
         print(f"Appended row, df rows went {before} → {after}")
 
         df.to_excel(path, index=False)
         print(f"Saved to {path}")
+    
+    print(" ")
+    print(" ")
+    print(" ")
 
     print(" ALL ITERATIONS DONE — final df shape:", df.shape)
     return df
 
 
-def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_threshold, params_list, lb, ub):
+def RUN_DAE_CALIBRATION(iteration, perturbation, delta, correlation_threshold, params_list, lb, ub):
     """
     Main function to run the DAE system simulation and calibration/validation process.
     Parameters:
@@ -90,9 +94,8 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
     Note: The function assumes that the necessary data files and system information are available in the specified format.
     """
 
-    system_data = system_info(condition)
+    system_data = system_info
 
-    str_info = system_data['str_info']
     var_names = system_data['var_names']
 
     parameters_og = system_data['parameters']
@@ -108,7 +111,6 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
     t_exp = system_data['t_exp']
     t_exp_v = system_data['t_exp_v']
     time_stamps_sim = system_data['time_stamps_sim']
-    
 
 
     # ORIGINAL SIMULATION USING VALIDATION DATA
@@ -126,10 +128,7 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
         return None
 
     for var in var_names:
-        if str_info[var][1] == "":
-            var_exp_v = str_info[var][0]
-        else:
-            var_exp_v = str_info[var][0]+" "+str_info[var][1]
+        var_exp_v = var
         y_val.append(df_val[var_exp_v].values)
         y_sim_og_v_tv.append(original_sol[var].values)
 
@@ -141,13 +140,23 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
         print("----------------------------------------------------- ORIGINAL MODEL -----------------------------------------------------")
         print("--------------------------------------------------------------------------------------------------------------------------")
         print(" ")
+
+        original_sol_v = simulate_model(simulation_type='normal', 
+                                    x0=x0_sim_v, 
+                                    parameters=parameters_og, 
+                                    constants=constants, 
+                                    time=time_stamps_sim)
+        plotting_comparison(original_sol_v = original_sol_v,
+                            params_list = list(parameters_og.keys()),
+                            parameters_updated = parameters_og,
+                            type = 'initial')   
+
         df_results_validation_initial = validation_analysis(y_val = y_val, 
                                                     y_sim_og = y_sim_og_v_tv,
                                                     var_names = var_names,
                                                     parameters = parameters_og,
                                                     type = 'initial')
-        df_t_values_initial = parameter_analysis(condition = condition, 
-                                            perturbation = perturbation, 
+        df_t_values_initial = parameter_analysis(perturbation = perturbation, 
                                             correlation_threshold = correlation_threshold,
                                             type = 'initial')
         parameters_initial_dict = {}
@@ -162,9 +171,10 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
     else:
         print(" ")
         print("--------------------------------------------------------------------------------------------------------------------------")
-        print("--------------------------------------- PSO OPTIMIZATION FOR PARAMETER CALIBRATION ---------------------------------------")
+        print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
         print("--------------------------------------------------------------------------------------------------------------------------")
         print(" ")
+
 
         def cost_function(p_vars): # COST FUNCTION USING PE DATA
             try:
@@ -177,9 +187,13 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
                                             param_list=params_list
                                         )
                 
-                err = None
+                err = 0
                 for var in var_names:
-                    err += np.sum((df_results[var].values - df_exp[var].values)**2)
+                    var_new = df_results[var]
+                    var_exp = df_exp[var]
+
+                    err += np.sum((var_new - var_exp)**2)
+            
                 return [err]
             except:
                 return [1e6]  
@@ -189,7 +203,7 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
         "bounds": FloatVar(lb=lb, ub=ub),
         "minmax": "min"
         }
-        pso = PSO.OriginalPSO(epoch=15, pop_size=50, c1=1.5, c2=1.5, w=0.5)
+        pso = PSO.OriginalPSO(epoch=100, pop_size=50, c1=1.5, c2=1.5, w=0.5)
         start = time.perf_counter()
 
         g_best = pso.solve(problem)
@@ -204,7 +218,7 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
 
         print(" ")
         print("--------------------------------------------------------------------------------------------------------------------------")
-        print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration} -------------------------------------------------")
+        print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration +1} -------------------------------------------------")
         print("--------------------------------------------------------------------------------------------------------------------------")
         print(" ")
 
@@ -214,21 +228,24 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
         
         param_dict = {}
         
-        i = 0
-        for key, value in parameters_og.items():
-            if key in params_list:
-                new_value = new_params_dict[key]
-                parameters_updated[key] = new_value
-                param_dict[key + '_value'] = new_value
-                if new_value == ub[i]:
-                    print(f"!!!       Warning: Parameter '{key}' reached its upper limit ({ub[i]}).")
-                if new_value == lb[i]:
-                    print(f"!!!       Warning: Parameter '{key}' reached its lower limit ({lb[i]}).")                
-                if new_value != ub[i] and new_value != lb[i]:
-                    print(f"Parameter '{key}' is between the limits ({lb[i]}, {ub[i]}).")
-                i += 1
-            
+        i_param = 0
+        for i_param in range(len(params_list)):
+            key = params_list[i_param]
+            new_value = new_params_dict[key]
+            parameters_updated[key] = new_value
+            param_dict[key + '_value'] = new_value
+            upper_limit = True
+            lower_limit = True
 
+            if abs((abs(new_value) - abs(ub[i_param]))) < 1e-3:
+                print(f"!!!       Warning: Parameter '{key}' reached its upper limit ({ub[i_param]}).")
+                upper_limit = False
+            if abs((abs(new_value) - abs(lb[i_param]))) < 1e-3:
+                print(f"!!!       Warning: Parameter '{key}' reached its lower limit ({lb[i_param]}).")                
+                lower_limit = False
+            if upper_limit and lower_limit:
+                print(f"Parameter '{key}' is between the limits ({lb[i_param]}, {ub[i_param]}).")
+        
         df_new_params = pd.DataFrame({
             "Parameter": params_list,
             "Original": [parameters_og[key] for key in params_list],
@@ -244,21 +261,10 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
                                 time=t_exp_v)
         
         if new_sol is None:
-            print(f"!!!!!!!!!!!!!               Simulation with new parameters failed at iteration {iteration}. Please check the parameters and initial conditions.")
+            print(f"!!!!!!!!!!!!!               Simulation with new parameters failed at iteration {iteration+1}. Please check the parameters and initial conditions.")
             return None
         
-        if iteration == 1:
-            parameters = parameters_og
-            type = 'initial'
-            params_list = parameters_og.keys()
-        else:
-            parameters = parameters_updated
-            type = 'new'
-        original_sol_v = simulate_model(simulation_type='normal', 
-                                    x0=x0_sim_v, 
-                                    parameters=parameters_og, 
-                                    constants=constants, 
-                                    time=time_stamps_sim)
+        
             
 
         print(" ")
@@ -266,12 +272,16 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
         print("------------------------------------------ MODEL COMPARISON TO VALIDATION DATA -------------------------------------------")
         print("--------------------------------------------------------------------------------------------------------------------------")
         print(" ")
-        plotting_comparison(condition = condition, 
-                            original_sol_v = original_sol_v,
+        original_sol_v = simulate_model(simulation_type='normal', 
+                                    x0=x0_sim_v, 
+                                    parameters=parameters_og, 
+                                    constants=constants, 
+                                    time=time_stamps_sim)
+        plotting_comparison(original_sol_v = original_sol_v,
                             params_list = params_list,
-                            parameters_updated = parameters,
-                            type = type)   
+                            parameters_updated = parameters_updated)   
 
+        
         y_sim_new_v_tv = []
         for var in var_names:
             y_sim_new_v_tv.append(new_sol[var].values)
@@ -282,19 +292,18 @@ def RUN_DAE_CALIBRATION(iteration, condition, perturbation, delta, correlation_t
                                                     parameters = df_parameters_updated,
                                                     y_sim_new = y_sim_new_v_tv)
         if df_results_validation is None:
-            print(f"!!!!!!!!!!!!!               Validation analysis failed at sensibility, on iteration {iteration}. Please check the simulation results.")
+            print(f"!!!!!!!!!!!!!               Validation analysis failed at sensibility, on iteration {iteration+1}. Please check the simulation results.")
             df_results_validation = pd.DataFrame()
             
 
 
-        df_t_values = parameter_analysis(condition = condition, 
-                                        perturbation = perturbation, 
+        df_t_values = parameter_analysis(perturbation = perturbation, 
                                         correlation_threshold = correlation_threshold, 
                                         params_list = params_list,
                                         parameters_updated = parameters_updated, 
                                         delta=delta)
         if df_t_values is None:
-            print(f"!!!!!!!!!!!!!               Parameter analysis failed at t-values, on iteration {iteration}. Please check the parameters and simulation results.")
+            print(f"!!!!!!!!!!!!!               Parameter analysis failed on iteration {iteration+1}. Please check the parameters and simulation results.")
             df_results_validation = pd.DataFrame()
         
         final_results = pd.concat([df_parameters_updated, df_results_validation, df_t_values], axis=1)

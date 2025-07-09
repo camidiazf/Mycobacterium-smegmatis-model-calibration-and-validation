@@ -5,7 +5,6 @@ from numpy.linalg import inv
 from statsmodels.stats.stattools import durbin_watson # type: ignore
 
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import seaborn as sns # type: ignore
 
 from DAE_Systems_Simulations import simulate_model
@@ -82,7 +81,10 @@ def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation
     i = 0
     for key in params_keys:
         sim_plus_minus_results = sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, delta = delta)
-            
+        if sim_plus_minus_results is None:
+            print(f"!!!!!!!!!!!!!               FIM Analysis for parameter {key} failed. Please check the parameters and initial conditions.")
+            FIM = None
+            return None
         sim_plus = np.vstack(sim_plus_minus_results[0]).T
         sim_minus = np.vstack(sim_plus_minus_results[1]).T
         dY_dp = (sim_plus - sim_minus) / (2 * delta)
@@ -90,7 +92,7 @@ def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation
 
         J[:, i] = dY_dp_weighted.flatten()
         i += 1
-
+    
     FIM = J.T @ J
 
 

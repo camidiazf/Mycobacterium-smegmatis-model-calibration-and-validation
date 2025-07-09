@@ -82,6 +82,10 @@ def validation_analysis(y_val, y_sim_og, var_names, parameters, y_sim_new = None
     validation_final_results['NMRSE'+ str_type] =  res_results_model['nmrse']
     validation_final_results['MAPE'+ str_type] = res_results_model['mape']
 
+    print("\nValidation Results:")
+    print('AIC: ', validation_final_results['AIC'+ str_type].values)
+    
+    
     residuals = res_results_model['res']
 
     result = stats.anderson(residuals)
@@ -127,7 +131,7 @@ def validation_analysis(y_val, y_sim_og, var_names, parameters, y_sim_new = None
     return validation_final_results
 
 
-def parameter_analysis(condition, perturbation, correlation_threshold, params_list = None, parameters_updated = None, type = None, delta=1e-4):
+def parameter_analysis(perturbation, correlation_threshold, params_list = None, parameters_updated = None, type = None, delta=1e-4):
     """
     Function to perform parameter analysis for the system.
     Parameters:
@@ -154,7 +158,7 @@ def parameter_analysis(condition, perturbation, correlation_threshold, params_li
     """
     
     
-    system_data = system_info(condition)
+    system_data = system_info
     parameters_og = system_data['parameters']
     var_names = system_data['var_names']
     constants = system_data['constants']
@@ -178,11 +182,15 @@ def parameter_analysis(condition, perturbation, correlation_threshold, params_li
 
     sensitivity = compute_sensitivity(x0_sim, parameters, constants, time_stamps_sim, perturbation, var_names) #SENSITIVITY WITH NEW PARAMS AND SIMULATION
     FIM = compute_FIM(x0_exp, parameters, constants, t_exp, weights_exp_stack, correlation_threshold, var_names, params_list, delta, type) #FIM WITH WITH NEW PARAMS AND PE DATA
-
+    
+    if FIM is None:
+        print("!!!!!!!!!!!!!               FIM Analysis failed. Please check the parameters and initial conditions.")
+        return None
+    
     return FIM[1] # Return the DataFrame with t-values
 
 
-def plotting_comparison(condition, original_sol_v, params_list, parameters_updated, type = None):
+def plotting_comparison(original_sol_v, params_list, parameters_updated, type = None):
     """
     Function to plot the comparison of model predictions with experimental validation data.
     Parameters:
@@ -201,7 +209,7 @@ def plotting_comparison(condition, original_sol_v, params_list, parameters_updat
         rgb = mcolors.to_rgb(color)
         return tuple(factor * c for c in rgb)
 
-    system_data = system_info(condition)
+    system_data = system_info
 
     var_names = system_data['var_names']
     colors = system_data['colors']
@@ -210,7 +218,6 @@ def plotting_comparison(condition, original_sol_v, params_list, parameters_updat
     time_stamps_sim = system_data['time_stamps_sim']
     df_val = system_data['df_val']
     t_exp_v = system_data['t_exp_v']
-    str_info = system_data['str_info']
 
     
     if original_sol_v is None:
@@ -233,24 +240,20 @@ def plotting_comparison(condition, original_sol_v, params_list, parameters_updat
 
     for i in range(len(var_names)):
         var = var_names[i]
-        if str_info[var][1] == "":
-            var_exp_v = str_info[var][0]
-        else:
-            var_exp_v = str_info[var][0]+" "+str_info[var][1]
-
-        axes[i].scatter(t_exp_v, df_val[var_exp_v], marker='o', label=f"{str_info[var][0]} exp validation", color=colors[var])
-        axes[i].plot(time_stamps_sim, original_sol_v[var], '-', label=f"{str_info[var][0]} original", color=colors[var])
+    
+        axes[i].scatter(t_exp_v, df_val[var], marker='o', label=f"{var} exp validation", color=colors[var])
+        axes[i].plot(time_stamps_sim, original_sol_v[var], '-', label=f"{var} original", color=colors[var])
         if type not in ['initial', 'Initial']:
-            axes[i].plot(time_stamps_sim, new_sol_v[var], '--', label="str_info[var][0]} new",color=darken_color(colors[var]))
+            axes[i].plot(time_stamps_sim, new_sol_v[var], '--', label=f"{var} original",color=darken_color(colors[var]))
         axes[i].set_xlabel("Time (h)")
-        axes[i].set_ylabel(var_exp_v)
+        axes[i].set_ylabel(var)
         axes[i].legend()
         axes[i].grid(True)
     
     if type in ['initial', 'Initial']:
-        fig.suptitle(f'Model Prediction vs. Validation Data', fontsize=18)
+        fig.suptitle(f'Initial Model vs. Validation Data', fontsize=18)
     else:
-        fig.suptitle(f'Model Prediction fitting {params_list} vs. Validation Data', fontsize=18)
+        fig.suptitle(f' New Model fitting {params_list} vs. Validation Data', fontsize=18)
     plt.tight_layout()
     plt.show()
 
