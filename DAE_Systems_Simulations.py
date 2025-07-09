@@ -164,7 +164,15 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     integrator = ca.integrator('integrator', 'idas', dae, {'grid': time, 'output_t0': True})
 
     # Solve
-    sol = integrator(x0=x0[:-1], z0=x0[-1])
+    simulation_run = True
+    dict_results = {}
+    try:
+        sol = integrator(x0=x0[:-1], z0=x0[-1])
+    except RuntimeError as e:
+        print("Integration was not performed:", e)
+        simulation_run = False
+        # You can decide what to return when it fails:
+        return None
 
     # Extract results
     t = time
@@ -189,17 +197,17 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
                     (pH[i] - parameters['pH_UL']) /
                 (parameters['pH_UL'] - parameters['pH_LL'])) ** 2) *
             (1 - X[i] / parameters['Xmax']))
+        
+    dict_results['t'] = t
+    dict_results['X'] = X
+    dict_results['C'] = C
+    dict_results['N'] = N
+    dict_results['CO2'] = CO2
+    dict_results['O'] = O
+    dict_results['pH'] = pH
+    dict_results['H'] = H
+    dict_results['mu_values'] = mu_values
 
-    df_results = pd.DataFrame({
-        't': t,
-        'X': X,
-        'C': C,
-        'N': N,
-        'CO2': CO2,
-        'O': O,
-        'pH': pH,
-        'H': H,
-        'mu_values': mu_values
-    })
-
+    # Create DataFrame with results
+    df_results = pd.DataFrame(dict_results)
     return df_results

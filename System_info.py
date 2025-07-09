@@ -17,6 +17,26 @@ def system_info(condition):
     # Variable names
     var_names = ['X', 'C', 'N', 'pH']
 
+    str_info = {
+        'X': ['Biomass', '(g/L)'],
+        'C': ['Glycerol', '(g/L)'] ,
+        'N': ['Ammonia', '(g/L)'],
+        'CO2': ['CO2', '(g/L)'],
+        'O2': ['O2', '(g/L)'],
+        'pH': ['pH',''],
+        'mu': ['Growth rate', '(1/h)']
+        }
+
+    colors = {
+        'X': '#66C2A6',
+        'C': '#FD8D62',
+        'N': '#8DA0CB',
+        'CO2': '#FED92F',
+        'O2': '#A7D854',
+        'pH': '#E78AC3',
+        'mu': '#B3B3B3'
+        } # Not necessary for the simulation, but useful for plotting
+
     # Simulation time parameters
     tf = 50
     n_steps = 500
@@ -116,6 +136,8 @@ def system_info(condition):
     return {
         'var_names': var_names,
         'parameters': parameters,
+        'str_info': str_info,
+        'colors': colors,
         'constants': constants,
         'x0_sim': x0_sim,
         'x0_exp': x0_exp,
