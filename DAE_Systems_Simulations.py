@@ -158,19 +158,16 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     # CasADi function
     f = ca.Function('f', [t, x, z], [dxdt])
     
-
     # ODE system
     dae = {'t': t, 'x': x, 'z': z, 'ode': f(t, x, z), 'alg': f_z}
     integrator = ca.integrator('integrator', 'idas', dae, {'grid': time, 'output_t0': True})
 
     # Solve
-    simulation_run = True
     dict_results = {}
     try:
         sol = integrator(x0=x0[:-1], z0=x0[-1])
     except RuntimeError as e:
         print("Integration was not performed:", e)
-        simulation_run = False
         # You can decide what to return when it fails:
         return None
 
@@ -211,3 +208,5 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     # Create DataFrame with results
     df_results = pd.DataFrame(dict_results)
     return df_results
+
+

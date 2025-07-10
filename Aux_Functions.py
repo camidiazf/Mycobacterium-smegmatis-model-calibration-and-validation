@@ -2,13 +2,43 @@ import numpy as np
 import pandas as pd
 import copy
 from numpy.linalg import inv
-from statsmodels.stats.stattools import durbin_watson # type: ignore
 
 import matplotlib.pyplot as plt
 import seaborn as sns # type: ignore
 
 from DAE_Systems_Simulations import simulate_model
 
+
+def define_cost_function(system_data, var_names, params_list):
+    x0_exp = system_data['x0_exp']
+    parameters_og = system_data['parameters']
+    constants = system_data['constants']
+    t_exp = system_data['t_exp']
+    df_exp = system_data['df_exp']
+
+    def cost_function(p_vars): # COST FUNCTION USING PE DATA
+        try:
+            df_results = simulate_model(simulation_type='calibrating', 
+                                        x0=x0_exp, 
+                                        parameters=parameters_og, 
+                                        constants=constants, 
+                                        time=t_exp,
+                                        p_vars=p_vars,
+                                        param_list=params_list
+                                    )
+            
+            err = 0
+            for var in var_names:
+                var_new = df_results[var]
+                var_exp = df_exp[var]
+
+                err += np.sum((var_new - var_exp)**2)
+        
+            return err
+        except:
+            err = 1e6
+            return err
+    return cost_function
 
 def sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, perturbation =  None, base_val = None, delta = None, type = None):
     params_plus = copy.deepcopy(parameters)
@@ -47,24 +77,43 @@ def sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, pertu
 
     return [Y_plus, Y_minus]
 
-def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation_threshold, var_names, params_list, delta=1e-4, type = None):
-    """
-    Function to compute the Fisher Information Matrix (FIM) for the model parameters.
-    Parameters:
-        - x0: array, initial conditions for the model.
-        - parameters_og: dict, original parameters of the model.
-        - constants: dict, constants used in the model.
-        - time_stamps: array, time points for the simulation.
-        - weights_exp: array, weights for the experimental data.
-        - correlation_threshold: float, threshold for identifying highly correlated parameters.
-    Returns:
-        - FIM: array, Fisher Information Matrix.
+
+
+
+def residuals_equations(y_val, y_sim, params_list):
+
+    n = len(y_val)
+    k = len(params_list) 
+
+    y_val_range = np.max(y_val) - np.min(y_val)
+
+    res = y_val - y_sim
+
+    rmse = np.sqrt(np.mean(res**2))
+
+    nmrse = np.sqrt(np.mean(res**2)) / y_val_range
     
-    This function computes the FIM by perturbing each parameter and calculating the sensitivity of the model outputs.
-    It also computes the correlation matrix of the parameters based on the FIM and identifies highly correlated parameter pairs.
-    It visualizes the correlation matrix using a heatmap and prints the highly correlated parameter pairs.
-    The function also prints the condition number and rank of the FIM, as well as its eigenvalues.
-    It returns the FIM as a numpy array.
+    mape = np.mean(np.abs(res/ y_val)) * 100
+
+    rss = np.sum(res**2)
+
+    aic = 2 * k + n * np.log(rss / n)
+
+    bic = k * np.log(n) + n * np.log(rss / n)
+
+    return {'res':res,
+            'rmse': rmse,
+            'nmrse': nmrse,
+            'mape': mape,
+            'aic': aic,
+            'bic': bic}
+
+
+
+
+def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation_threshold, var_names, params_list, delta, type):
+    """
+
     """
 
     print(" ")
@@ -104,13 +153,20 @@ def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation
     print(f"FIM rank: {rank}")
     print(f"FIM eigenvalues: {eigvals}")
 
-    compute_correlation_matrix(FIM, parameters, correlation_threshold)
-    df_t_values = None
-    
+    corr_matrix = compute_correlation_matrix(FIM, parameters, correlation_threshold)
+    df_t_values = pd.DataFrame()
     if type not in ['initial', 'Initial']:
         df_t_values = compute_t_values(parameters, params_list, FIM)
+
+        if df_t_values is None:
+            print(f"!!!!!!!!!!!!!               Parameter analysis, t-values, failed on iteration. Please check the parameters and simulation results.")
+            df_t_values = pd.DataFrame()
+    else:
+        df_t_values = pd.DataFrame()
         
-    return [FIM, df_t_values]
+    return {'FIM': FIM,
+            'correlation_matrix': corr_matrix,
+            't_values': df_t_values,}
 
 def compute_correlation_matrix(FIM, parameters, correlation_threshold):
     params_keys = list(parameters.keys())
@@ -133,13 +189,12 @@ def compute_correlation_matrix(FIM, parameters, correlation_threshold):
         yticklabels=params_keys,
         annot=True,
         fmt=".2f",
-        cmap=sns.diverging_palette(270, 330, as_cmap=True),
+        cmap='coolwarm',
         center=0
     )
     plt.title("Parameter correlation matrix")
     plt.tight_layout()
     plt.show()
-    
 
     highly_correlated_pairs = []
 
@@ -152,18 +207,13 @@ def compute_correlation_matrix(FIM, parameters, correlation_threshold):
     print(f"Highly correlated parameter pairs (|ρ| > {correlation_threshold}):\n")
     for p1, p2, corr in highly_correlated_pairs:
         print(f"{p1:10s} <--> {p2:10s} | correlation: {corr:.4f}")
+
+    return corr_matrix
     
 
 def compute_t_values(parameters, params_list, FIM):
     """
-    Function to compute t-values for the parameters based on the Fisher Information Matrix (FIM).
-    Parameters:
-        - parameters: dict, model parameters.
-        - params_list: list, list of parameter names to compute t-values for.
-        - FIM: array, Fisher Information Matrix.
-    Returns:
-        - df_t_values: DataFrame, containing t-values for the specified parameters.
-    
+
     """
 
     print(" ")
@@ -197,17 +247,7 @@ def compute_t_values(parameters, params_list, FIM):
 
 def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, var_names):
     """
-    Function to compute the sensitivity of the parameters of the model to each state variable
-    Parameters:
-        - x0: array, initial conditions for the model.
-        - parameters_og: dict, original parameters of the model.
-        - constants: dict, constants used in the model.
-        - time_stamps: array, time points for the simulation.
-        - perturbation: float, perturbation factor for sensitivity analysis.
-        - var_names: list, names of the state variables to analyze.
-    Returns:
-        - sensitivity_df: DataFrame, containing the sensitivity values for each parameter and state variable.
-    
+
     """
 
     print(" ")
@@ -250,7 +290,6 @@ def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, va
     top5_df = sensitivity_sorted.head(5)
     sensitivity_df.drop(columns='Mean', inplace=True)
 
-    # print(sensitivity_df)
 
     fig, axes = plt.subplots(len(var_names), 1, figsize=(10, 12), sharey=False)
 
@@ -284,40 +323,4 @@ def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, va
 
 
 
-def residuals_equations(y_val, y_sim, params_list):
 
-    n = len(y_val)
-    k = len(params_list) 
-
-    y_val_range = np.max(y_val) - np.min(y_val)
-
-    res = y_val - y_sim
-
-    rmse = np.sqrt(np.mean(res**2))
-
-    nmrse = np.sqrt(np.mean(res**2)) / y_val_range
-    
-    mape = np.mean(np.abs(res/ y_val)) * 100
-
-    rss = np.sum(res**2)
-
-    aic = 2 * k + n * np.log(rss / n)
-
-    bic = k * np.log(n) + n * np.log(rss / n)
-
-    return {'res':res,
-            'rmse': rmse,
-            'nmrse': nmrse,
-            'mape': mape,
-            'aic': aic,
-            'bic': bic}
-
-
-
-
-
-
-
-
-
-    
