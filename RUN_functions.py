@@ -39,6 +39,7 @@ def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, param
         print("")
         print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
         print("")
+    
         Results = RUN_DAE_CALIBRATION(iteration = i, 
                                 perturbation = perturbation, 
                                 delta = delta,
@@ -65,9 +66,20 @@ def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, param
             run_name = "Original Model"
         else:
             run_name = f"Model{i+1}"
-            sensitivity_df_all.append(sensitivity_df)
-            corr_matrix_all.append(corr_matrix)
-            residuals_all.append(residuals)
+            if sensitivity_df is not None:
+                sensitivity_df_all.append(sensitivity_df)
+
+            else:
+                print('Not adding sensitivity data for this iteration, it is None')
+            if corr_matrix is not None:
+                corr_matrix_all.append(corr_matrix)
+            else:
+                print('Not adding correlation matrix for this iteration, it is None')
+            if residuals is not None:
+                residuals_all.append(residuals)
+            else:
+                print('Not adding residuals for this iteration, it is None')
+                
 
             
         FINAL_RESULTS.insert(0, 'Model_', run_name)
@@ -95,8 +107,6 @@ def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, param
     print(" ")
 
     RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
-
-    
 
 
     return FINAL_RESULTS
@@ -257,10 +267,15 @@ def RUN_ANALYSIS(system_data, perturbation, correlation_threshold, delta, parame
                                         parameters = parameters,
                                         delta = delta,
                                         type = type)
-
-    t_values_FIM = param_analysis['t_values']
-    corr_matrix = param_analysis['correlation_matrix']
-    sensitivity_df = param_analysis['sensitivity']
+    if param_analysis is None:
+        print("!!!!!!!!!!!!!               Parameter Analysis failed. Please check the parameters and initial conditions.")
+        t_values_FIM = None
+        corr_matrix = None
+        sensitivity_df = None
+    else:
+        t_values_FIM = param_analysis['t_values']
+        corr_matrix = param_analysis['correlation_matrix']
+        sensitivity_df = param_analysis['sensitivity']
 
     return {'validation_results': validation_results,
             'residuals': residuals,
@@ -275,116 +290,128 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
     # sensitivity_df_all: list of pandas.DataFrame (shape: n_params × n_states)
     # corr_matrix_all:   list of numpy.ndarray (shape: n_params × n_params)
     # residuals_all:     list of numpy.ndarray
+    if sensitivity_df_all is None or len(sensitivity_df_all) == 0 or sensitivity_df_all == []:
+        print("No sensitivity data available for plotting.")
+    else:
+        
+        # 1) Sensitivity Bar‐Plots with ±1σ Error Bars
+        stacked_sens = np.stack([df.values for df in sensitivity_df_all], axis=0)  # (n_iter, n_params, n_states)
+        mean_sens = stacked_sens.mean(axis=0)
+        std_sens  = stacked_sens.std(axis=0)
 
-    # 1) Sensitivity Bar‐Plots with ±1σ Error Bars
-    stacked_sens = np.stack([df.values for df in sensitivity_df_all], axis=0)  # (n_iter, n_params, n_states)
-    mean_sens = stacked_sens.mean(axis=0)
-    std_sens  = stacked_sens.std(axis=0)
+        params = sensitivity_df_all[0].index.tolist()
+        states = sensitivity_df_all[0].columns.tolist()
 
-    params = sensitivity_df_all[0].index.tolist()
-    states = sensitivity_df_all[0].columns.tolist()
+        fig, axes = plt.subplots(len(states), 1, figsize=(8, 2*len(states)), sharex=True)
+        for j, state in enumerate(states):
+            axes[j].bar(params,
+                        mean_sens[:, j],
+                        yerr=std_sens[:, j],
+                        capsize=4,
+                        color='red',
+                        linewidth=1.5) 
+            axes[j].set_title(f"Sensitivity of “{state}” (mean ± σ)")
+            axes[j].set_ylabel("Sensitivity")
+            axes[j].tick_params(axis="x", rotation=90)
+            axes[j].grid(axis="y", alpha=0.5)
+        axes[-1].set_xlabel("Parameter")
+        plt.tight_layout()
+        plt.show()
 
-    fig, axes = plt.subplots(len(states), 1, figsize=(8, 2*len(states)), sharex=True)
-    for j, state in enumerate(states):
-        axes[j].bar(params,
-                    mean_sens[:, j],
-                    yerr=std_sens[:, j],
-                    capsize=4,
-                    color='red',
-                    linewidth=1.5) 
-        axes[j].set_title(f"Sensitivity of “{state}” (mean ± σ)")
-        axes[j].set_ylabel("Sensitivity")
-        axes[j].tick_params(axis="x", rotation=90)
-        axes[j].grid(axis="y", alpha=0.5)
-    axes[-1].set_xlabel("Parameter")
-    plt.tight_layout()
-    plt.show()
 
-    # 2.2 Residuals histogram with ±1σ shading and normal fit curve
-    all_res    = np.concatenate(residuals_all)
-    mu_all, std_all = stats.norm.fit(all_res)
+    if residuals_all is None or len(residuals_all) == 0 or residuals_all == []:
+        print("No residuals data available for plotting.")
+    else:
+        # 2.2 Residuals histogram with ±1σ shading and normal fit curve
+        all_res    = np.concatenate(residuals_all)
+        mu_all, std_all = stats.norm.fit(all_res)
 
-    bins       = np.histogram_bin_edges(all_res, bins="auto")
-    bin_centers = (bins[:-1] + bins[1:]) / 2
-    densities  = np.vstack([np.histogram(r, bins=bins, density=True)[0] for r in residuals_all])
+        bins       = np.histogram_bin_edges(all_res, bins="auto")
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+        densities  = np.vstack([np.histogram(r, bins=bins, density=True)[0] for r in residuals_all])
 
-    mean_den = densities.mean(axis=0)
-    std_den  = densities.std(axis=0)
+        mean_den = densities.mean(axis=0)
+        std_den  = densities.std(axis=0)
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Left: histogram with ±1σ error bars and normal‐fit curve
-    ax0 = axes[0]
-    ax0.bar(bin_centers,
-            mean_den,
-            width=np.diff(bins),
-            alpha=0.7,
-            yerr=std_den,
-            capsize=4,
-            color='blue',
-            linewidth=1.5)
-    x_norm = np.linspace(bin_centers.min(), bin_centers.max(), 200)
-    ax0.plot(x_norm,
-            stats.norm.pdf(x_norm, mu_all, std_all),
-            'k-',
-            lw=2,
-            label="Normal fit")
-    ax0.set_xlabel("Residual value")
-    ax0.set_ylabel("Density")
-    ax0.set_title("Residuals Histogram\n(mean ± σ) with Normal Fit")
-    ax0.legend()
-    ax0.grid(alpha=0.4)
+        # Left: histogram with ±1σ error bars and normal‐fit curve
+        ax0 = axes[0]
+        ax0.bar(bin_centers,
+                mean_den,
+                width=np.diff(bins),
+                alpha=0.7,
+                yerr=std_den,
+                capsize=4,
+                color='blue',
+                linewidth=1.5)
+        x_norm = np.linspace(bin_centers.min(), bin_centers.max(), 200)
+        ax0.plot(x_norm,
+                stats.norm.pdf(x_norm, mu_all, std_all),
+                'k-',
+                lw=2,
+                label="Normal fit")
+        ax0.set_xlabel("Residual value")
+        ax0.set_ylabel("Density")
+        ax0.set_title("Residuals Histogram\n(mean ± σ) with Normal Fit")
+        ax0.legend()
+        ax0.grid(alpha=0.4)
 
-    # Right: aggregated Q–Q plot with ±1σ error bars
-    ax1 = axes[1]
-    m     = residuals_all[0].size
-    probs = (np.arange(1, m+1) - 0.5) / m
-    theo  = stats.norm.ppf(probs, loc=mu_all, scale=std_all)
-    sorted_all = np.vstack([np.sort(r) for r in residuals_all])
-    mean_q     = sorted_all.mean(axis=0)
-    std_q      = sorted_all.std(axis=0)
+        # Right: aggregated Q–Q plot with ±1σ error bars
+        ax1 = axes[1]
+        m     = residuals_all[0].size
+        probs = (np.arange(1, m+1) - 0.5) / m
+        theo  = stats.norm.ppf(probs, loc=mu_all, scale=std_all)
+        sorted_all = np.vstack([np.sort(r) for r in residuals_all])
+        mean_q     = sorted_all.mean(axis=0)
+        std_q      = sorted_all.std(axis=0)
 
-    ax1.errorbar(theo,
-                mean_q,
-                yerr=std_q,
-                fmt='o',
-                ecolor='gray',
-                elinewidth=1,
-                capsize=3)
-    lims = [min(theo.min(), mean_q.min()), max(theo.max(), mean_q.max())]
-    ax1.plot(lims, lims, 'r--')
-    ax1.set_xlabel("Theoretical Quantiles")
-    ax1.set_ylabel("Mean Ordered Residuals")
-    ax1.set_title("Aggregated Q–Q Plot\n(mean ± σ)")
-    ax1.grid(alpha=0.4)
+        ax1.errorbar(theo,
+                    mean_q,
+                    yerr=std_q,
+                    fmt='o',
+                    ecolor='gray',
+                    elinewidth=1,
+                    capsize=3)
+        lims = [min(theo.min(), mean_q.min()), max(theo.max(), mean_q.max())]
+        ax1.plot(lims, lims, 'r--')
+        ax1.set_xlabel("Theoretical Quantiles")
+        ax1.set_ylabel("Mean Ordered Residuals")
+        ax1.set_title("Aggregated Q–Q Plot\n(mean ± σ)")
+        ax1.grid(alpha=0.4)
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
+    
+    if corr_matrix_all is None or len(corr_matrix_all) == 0 or corr_matrix_all == []:
+        print("No correlation matrix data available for plotting.")
+    else:
+        system_data = system_info
+        parameters_og = system_data['parameters']
+        params = list(parameters_og.keys())
+        # 2.4 Correlation-matrix heatmap with mean±σ annotations
+        corr_stack = np.stack(corr_matrix_all, axis=0)
+        mean_corr  = corr_stack.mean(axis=0)
+        std_corr   = corr_stack.std(axis=0)
+        
+        n      = mean_corr.shape[0]
+        annot  = np.empty((n, n), dtype=object)
 
-    # 2.4 Correlation-matrix heatmap with mean±σ annotations
-    corr_stack = np.stack(corr_matrix_all, axis=0)
-    mean_corr  = corr_stack.mean(axis=0)
-    std_corr   = corr_stack.std(axis=0)
+        for i in range(n):
+            for j in range(n):
+                # two-line annotation: mean on top, ±σ below
+                annot[i, j] = f"{mean_corr[i,j]:.2f}\n±{std_corr[i,j]:.2f}"
 
-    params = sensitivity_df_all[0].index.tolist()
-    n      = mean_corr.shape[0]
-    annot  = np.empty((n, n), dtype=object)
+        plt.figure(figsize=(12, 9))
+        sns.heatmap(mean_corr,
+                    annot=annot,
+                    fmt="",
+                    xticklabels=params,
+                    yticklabels=params,
+                    cmap="coolwarm",
+                    center=0,
+                    annot_kws={"fontsize":10, 'fontweight':'bold'})
+        plt.title("Parameter Correlation Matrix (mean ± σ)")
 
-    for i in range(n):
-        for j in range(n):
-            # two-line annotation: mean on top, ±σ below
-            annot[i, j] = f"{mean_corr[i,j]:.2f}\n±{std_corr[i,j]:.2f}"
-
-    plt.figure(figsize=(12, 9))
-    sns.heatmap(mean_corr,
-                annot=annot,
-                fmt="",
-                xticklabels=params,
-                yticklabels=params,
-                cmap="coolwarm",
-                center=0,
-                annot_kws={"fontsize":10, 'fontweight':'bold'})
-    plt.title("Parameter Correlation Matrix (mean ± σ)")
-
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()

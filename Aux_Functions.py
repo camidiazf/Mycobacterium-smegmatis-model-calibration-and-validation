@@ -274,6 +274,9 @@ def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, va
             continue
 
         sim_plus_minus_results = sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, perturbation=perturbation, base_val=base_val)
+        if sim_plus_minus_results is None:
+            print(f"!!!!!!!!!!!!!               Validation Analysis for parameter {key} failed. Please check the parameters and initial conditions.")
+            return None
         sim_plus = sim_plus_minus_results[0]
         sim_minus = sim_plus_minus_results[1]    
 

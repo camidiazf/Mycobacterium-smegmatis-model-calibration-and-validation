@@ -23,6 +23,7 @@ def validation_analysis(system_data, var_names, parameters, params_list, type):
 
     if type in ['initial', 'Initial']:
         str_name = "_og"
+        params_list = []
     else:
         str_name = "_new"
     x0_sim_v = system_data['x0_sim_v']
@@ -174,9 +175,6 @@ def parameter_analysis(perturbation, correlation_threshold, params_list, paramet
     t_values = FIM['t_values']
     FIM = FIM['FIM']  
 
-    if FIM is None:
-        print("!!!!!!!!!!!!!               FIM Analysis failed. Please check the parameters and initial conditions.")
-        return None
     
     return {'correlation_matrix':corr_matrix,
             't_values': t_values,

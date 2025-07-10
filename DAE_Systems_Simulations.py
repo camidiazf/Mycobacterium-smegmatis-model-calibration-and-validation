@@ -158,16 +158,19 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     # CasADi function
     f = ca.Function('f', [t, x, z], [dxdt])
     
+
     # ODE system
     dae = {'t': t, 'x': x, 'z': z, 'ode': f(t, x, z), 'alg': f_z}
     integrator = ca.integrator('integrator', 'idas', dae, {'grid': time, 'output_t0': True})
 
     # Solve
+    simulation_run = True
     dict_results = {}
     try:
         sol = integrator(x0=x0[:-1], z0=x0[-1])
     except RuntimeError as e:
         print("Integration was not performed:", e)
+        simulation_run = False
         # You can decide what to return when it fails:
         return None
 
@@ -209,4 +212,33 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     df_results = pd.DataFrame(dict_results)
     return df_results
 
+def define_cost_function(system_data, var_names, params_list):
+    x0_exp = system_data['x0_exp']
+    parameters_og = system_data['parameters_og']
+    constants = system_data['constants']
+    t_exp = system_data['t_exp']
+    df_exp = system_data['df_exp']
 
+    def cost_function(p_vars): # COST FUNCTION USING PE DATA
+        try:
+            df_results = simulate_model(simulation_type='calibrating', 
+                                        x0=x0_exp, 
+                                        parameters=parameters_og, 
+                                        constants=constants, 
+                                        time=t_exp,
+                                        p_vars=p_vars,
+                                        param_list=params_list
+                                    )
+            
+            err = 0
+            for var in var_names:
+                var_new = df_results[var]
+                var_exp = df_exp[var]
+
+                err += np.sum((var_new - var_exp)**2)
+        
+            return err
+        except:
+            err = 1e6
+            return err
+    return cost_function
