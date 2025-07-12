@@ -38,6 +38,8 @@ parameters = {
     'O2_sat' : 0.007267,
     } 
 
+parameters_og_list = list(parameters.keys()) 
+
 # Constants for the system
 constants = {'pka1': 6.86, # pKa of KH2PO4
             'pka2': 3.13,  # pka of C6H8O7
@@ -63,7 +65,8 @@ X0 = 0.229
 c0 = 5.389
 n0 = 0.951
 co20 = 0.439 / 1000
-o20 = parameters['O2_sat']
+# o20 = parameters['O2_sat']
+o20 = 0.0001
 z0 =7.2
 x0_sim = np.array([X0, c0, n0, co20, o20, z0])
 
@@ -72,7 +75,8 @@ X0 = 0.223
 c0 = 5.992
 n0 = 1.027
 co20 = 0.439 / 1000
-o20 = parameters['O2_sat']
+# o20 = parameters['O2_sat']
+o20 = 0.0001
 z0 = 7.2
 x0_sim_v = np.array([X0, c0, n0, co20, o20, z0])
 
@@ -112,10 +116,20 @@ weights_exp_stack = np.vstack([
 t_exp_v = df_exp['Time (Hours)']
 
 
+
+
+# Calibration DATA
+
+delta = 1e-4
+correlation_threshold = 0.95
+perturbation = 0.10
+
+
 # System information dictionary
 system_info = {
     'var_names': var_names,
     'parameters': parameters,
+    'parameters_og_list': parameters_og_list,
     'colors': colors,
     'constants': constants,
     'x0_sim': x0_sim,
@@ -127,6 +141,9 @@ system_info = {
     'df_val': df_val,
     't_exp': t_exp,
     't_exp_v': t_exp_v,
-    'weights_exp_stack': weights_exp_stack
+    'weights_exp_stack': weights_exp_stack,
+    'delta': delta,
+    'correlation_threshold': correlation_threshold,
+    'perturbation': perturbation
 
 }

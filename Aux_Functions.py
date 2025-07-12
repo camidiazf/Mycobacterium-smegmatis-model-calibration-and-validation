@@ -7,12 +7,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns # type: ignore
 
 from DAE_Systems_Simulations import simulate_model
+from System_info import system_info as system_data
 
 
-def define_cost_function(system_data, var_names, params_list):
+def define_cost_function(params_list):
+    var_names = system_data['var_names']
     x0_exp = system_data['x0_exp']
     parameters_og = system_data['parameters']
-    constants = system_data['constants']
     t_exp = system_data['t_exp']
     df_exp = system_data['df_exp']
 
@@ -20,8 +21,7 @@ def define_cost_function(system_data, var_names, params_list):
         try:
             df_results = simulate_model(simulation_type='calibrating', 
                                         x0=x0_exp, 
-                                        parameters=parameters_og, 
-                                        constants=constants, 
+                                        parameters=parameters_og,
                                         time=t_exp,
                                         p_vars=p_vars,
                                         param_list=params_list
@@ -40,21 +40,25 @@ def define_cost_function(system_data, var_names, params_list):
             return err
     return cost_function
 
-def sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, perturbation =  None, base_val = None, delta = None, type = None):
+def sim_plus_minus(key, x0, parameters, time_stamps, base_val = None):
+    var_names = system_data['var_names']
+    
+    
     params_plus = copy.deepcopy(parameters)
     params_minus = copy.deepcopy(parameters)
-    if delta is None:  
+    if base_val is not None:  #Sensitivity analysis
+        perturbation = system_data['perturbation']
         params_plus[key] = base_val * (1 + perturbation)
         params_minus[key] = base_val * (1 - perturbation)
 
-    if perturbation is None:
+    else: # FIM analysis
+        delta = system_data['delta']
         params_plus[key] += delta
         params_minus[key] -= delta
 
     sim_plus = simulate_model(simulation_type='normal', 
                                 x0=x0, 
                                 parameters=params_plus, 
-                                constants=constants, 
                                 time=time_stamps)
     if sim_plus is None:
         print(f"!!!!!!!!!!!!!               Simulation with parameter {key} perturbed up failed. Please check the parameters and initial conditions.")
@@ -62,7 +66,6 @@ def sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, pertu
     sim_minus = simulate_model(simulation_type='normal', 
                                 x0=x0, 
                                 parameters=params_minus, 
-                                constants=constants, 
                                 time=time_stamps)
     if sim_minus is None:
         print(f"!!!!!!!!!!!!!               Simulation with parameter {key} perturbed down failed. Please check the parameters and initial conditions.")
@@ -80,11 +83,7 @@ def sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, pertu
 
 
 
-def residuals_equations(y_val, y_sim, params_list):
-
-    n = len(y_val)
-    k = len(params_list) 
-
+def residuals_equations(y_val, y_sim, params_list = None):
     y_val_range = np.max(y_val) - np.min(y_val)
 
     res = y_val - y_sim
@@ -95,41 +94,42 @@ def residuals_equations(y_val, y_sim, params_list):
     
     mape = np.mean(np.abs(res/ y_val)) * 100
 
-    rss = np.sum(res**2)
+    if params_list is None:
+        return [rmse, nmrse, mape]
+    else:
+        n = len(y_val)
+        k = len(params_list) 
 
-    aic = 2 * k + n * np.log(rss / n)
+        rss = np.sum(res**2)
 
-    bic = k * np.log(n) + n * np.log(rss / n)
+        aic = 2 * k + n * np.log(rss / n)
 
-    return {'res':res,
-            'rmse': rmse,
-            'nmrse': nmrse,
-            'mape': mape,
-            'aic': aic,
-            'bic': bic}
+        bic = k * np.log(n) + n * np.log(rss / n)
+
+        return [[aic, bic, rmse, nmrse, mape], res]
 
 
 
 
-def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation_threshold, var_names, params_list, delta, type):
+def compute_FIM(iteration, x0, parameters, time_stamps, params_list):
     """
 
     """
 
-    print(" ")
-    print("                                            >>>>>>>>>> FIM Analysis <<<<<<<<<<                                            ")
-    print(" ")
+    # print(" ")
+    # print("                                            >>>>>>>>>> FIM Analysis <<<<<<<<<<                                            ")
+    # print(" ")
 
-
-    params_keys = list(parameters.keys())
-    n_params = len(params_keys)
+    weights_exp = system_data['weights_exp_stack']
+    parameters_og_list = system_data['parameters_og_list']
+    n_params = len(parameters_og_list)
     n_outputs = weights_exp.shape[0] * weights_exp.shape[1]
-
+    delta = system_data['delta']
     J = np.zeros((n_outputs, n_params))
 
     i = 0
-    for key in params_keys:
-        sim_plus_minus_results = sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, delta = delta)
+    for key in parameters_og_list:
+        sim_plus_minus_results = sim_plus_minus(key, x0, parameters, time_stamps)
         if sim_plus_minus_results is None:
             print(f"!!!!!!!!!!!!!               FIM Analysis for parameter {key} failed. Please check the parameters and initial conditions.")
             FIM = None
@@ -149,32 +149,29 @@ def compute_FIM(x0, parameters, constants, time_stamps, weights_exp, correlation
     cond_number = np.linalg.cond(FIM)
     rank = np.linalg.matrix_rank(FIM)
 
-    print(f"FIM condition number: {cond_number:.2e}")
-    print(f"FIM rank: {rank}")
-    print(f"FIM eigenvalues: {eigvals}")
+    # print(f"FIM condition number: {cond_number:.2e}")
+    # print(f"FIM rank: {rank}")
+    # print(f"FIM eigenvalues: {eigvals}")
 
-    corr_matrix = compute_correlation_matrix(FIM, parameters, correlation_threshold)
-    df_t_values = pd.DataFrame()
-    if type not in ['initial', 'Initial']:
-        df_t_values = compute_t_values(parameters, params_list, FIM)
+    corr_matrix = compute_correlation_matrix(FIM)
+    t_values_complete = compute_t_values(iteration, parameters, params_list, FIM)
 
-        if df_t_values is None:
-            print(f"!!!!!!!!!!!!!               Parameter analysis, t-values, failed on iteration. Please check the parameters and simulation results.")
-            df_t_values = pd.DataFrame()
-    else:
-        df_t_values = pd.DataFrame()
+    if t_values_complete is None:
+        print(f"!!!!!!!!!!!!!               Parameter analysis, t-values, failed on iteration. Please check the parameters and simulation results.")
+        t_values_complete = [None] * len(parameters_og_list)
         
     return {'FIM': FIM,
             'correlation_matrix': corr_matrix,
-            't_values': df_t_values,}
+            't_values': t_values_complete,}
 
-def compute_correlation_matrix(FIM, parameters, correlation_threshold):
-    params_keys = list(parameters.keys())
+def compute_correlation_matrix(FIM):
+    parameters_og_list = system_data['parameters_og_list']
+    correlation_threshold = system_data['correlation_threshold']
     FIM_inv = inv(FIM)
     corr_matrix = np.zeros_like(FIM)
 
-    for i in range(len(params_keys)):
-        for j in range(len(params_keys)):
+    for i in range(len(parameters_og_list)):
+        for j in range(len(parameters_og_list)):
             try:
                 corr_matrix[i, j] = FIM_inv[i, j] / np.sqrt(FIM_inv[i, i] * FIM_inv[j, j])
                 #to catch invalid srqt operations
@@ -182,85 +179,92 @@ def compute_correlation_matrix(FIM, parameters, correlation_threshold):
                 print(f"Invalid sqrt operation for indices ({i}, {j})")
                 corr_matrix[i, j] = None
 
-    plt.figure(figsize=(12, 9))
-    sns.heatmap(
-        corr_matrix,
-        xticklabels=params_keys,
-        yticklabels=params_keys,
-        annot=True,
-        fmt=".2f",
-        cmap='coolwarm',
-        center=0
-    )
-    plt.title("Parameter correlation matrix")
-    plt.tight_layout()
-    plt.show()
+    # plt.figure(figsize=(12, 9))
+    # sns.heatmap(
+    #     corr_matrix,
+    #     xticklabels=parameters_og_list,
+    #     yticklabels=parameters_og_list,
+    #     annot=True,
+    #     fmt=".2f",
+    #     cmap='coolwarm',
+    #     center=0
+    # )
+    # plt.title("Parameter correlation matrix")
+    # plt.tight_layout()
+    # plt.show()
 
     highly_correlated_pairs = []
 
-    for i in range(len(params_keys)):
-        for j in range(i + 1, len(params_keys)):
+    for i in range(len(parameters_og_list)):
+        for j in range(i + 1, len(parameters_og_list)):
             corr_val = corr_matrix[i, j]
             if abs(corr_val) > correlation_threshold:
-                highly_correlated_pairs.append((params_keys[i], params_keys[j], corr_val))
+                highly_correlated_pairs.append((parameters_og_list[i], parameters_og_list[j], corr_val))
 
-    print(f"Highly correlated parameter pairs (|ρ| > {correlation_threshold}):\n")
-    for p1, p2, corr in highly_correlated_pairs:
-        print(f"{p1:10s} <--> {p2:10s} | correlation: {corr:.4f}")
+    # print(f"Highly correlated parameter pairs (|ρ| > {correlation_threshold}):\n")
+    # for p1, p2, corr in highly_correlated_pairs:
+    #     print(f"{p1:10s} <--> {p2:10s} | correlation: {corr:.4f}")
 
     return corr_matrix
     
 
-def compute_t_values(parameters, params_list, FIM):
+def compute_t_values(iteration, parameters, params_list, FIM):
     """
 
     """
 
-    print(" ")
-    print("                                              >>>>>>>>>> t-values <<<<<<<<<<                                              ")
-    print(" ")
-    params_adjusted = copy.deepcopy(parameters)
-    params_keys = list(parameters.keys())
-
-    adjusted_indices = [params_keys.index(k) for k in params_list]
-
-    FIM_adj = FIM[np.ix_(adjusted_indices, adjusted_indices)]
-    Cov_adj = inv(FIM_adj)
-
-    theta_adj = np.array([params_adjusted[k] for k in params_list])
-    try:
-        std_errors = np.sqrt(np.diag(Cov_adj))
-    except RuntimeError as e:
-        print("Error in computing standard errors:", e)
-        return None
-    t_values = theta_adj / std_errors
+    # print(" ")
+    # print("                                              >>>>>>>>>> t-values <<<<<<<<<<                                              ")
+    # print(" ")
+    parameters_og_list = system_data['parameters_og_list']
+    if iteration == None:
+        t_values_complete = [None] * len(parameters_og_list)
+    else:
+        params_adjusted = copy.deepcopy(parameters)
     
-    t_dict = {}
+        adjusted_indices = [params_list.index(k) for k in params_list]
+
+        FIM_adj = FIM[np.ix_(adjusted_indices, adjusted_indices)]
+        Cov_adj = inv(FIM_adj)
+
+        theta_adj = np.array([params_adjusted[k] for k in params_list])
+        try:
+            std_errors = np.sqrt(np.diag(Cov_adj))
+        except RuntimeError as e:
+            print("Error in computing standard errors:", e)
+            return None
+        t_values = theta_adj / std_errors
+        t_values_complete = []
+        for key in parameters_og_list:
+            if key in params_list:
+                t_values_complete.append(t_values[params_list.index(key)])
+            else:
+                t_values_complete.append(None)
+        for k, theta, se, t in zip(params_list, theta_adj, std_errors, t_values):
+            
+            print(f"{k:<10}: θ = {theta:.6f}, SE = {se:.6f}, t-value = {t:.2f}")
+    return t_values_complete
 
 
-    for k, theta, se, t in zip(params_list, theta_adj, std_errors, t_values):
-        print(f"{k:<10}: θ = {theta:.6f}, SE = {se:.6f}, t-value = {t:.2f}")
-        t_dict['t_value_'+k] = t
-    df_t_values = pd.DataFrame([t_dict])
-    return df_t_values
-
-
-def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, var_names):
+def compute_sensitivity(x0, parameters, time_stamps):
     """
 
     """
 
-    print(" ")
-    print("                                        >>>>>>>>>> Sensitivity Analysis <<<<<<<<<<                                        ")
-    print(" ")
-    param_keys = list(parameters.keys())
+    # print(" ")
+    # print("                                        >>>>>>>>>> Sensitivity Analysis <<<<<<<<<<                                        ")
+    # print(" ")
 
-    sensitivity_df = pd.DataFrame(index = param_keys, columns=var_names)
+    perturbation = system_data['perturbation']
+    parameters_og_list = system_data['parameters_og_list']
+    var_names = system_data['var_names']
+
+    sensitivity_df = pd.DataFrame(index = parameters_og_list, 
+                                columns=var_names)
     model_sim_sensitivity = simulate_model(simulation_type='normal', 
-                        x0=x0, 
-                        parameters=parameters, 
-                        constants=constants, 
-                        time=time_stamps)
+                                            x0=x0, 
+                                            parameters=parameters,
+                                            time=time_stamps)
     if model_sim_sensitivity is None:
         print("!!!!!!!!!!!!!               Simulation for model sensitivity failed. Please check the parameters and initial conditions.")
         return None
@@ -268,12 +272,17 @@ def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, va
     for var in var_names:
         Y_base.append(model_sim_sensitivity[var])
 
-    for key in param_keys:
+    for key in parameters_og_list:
         base_val = parameters[key]
         if base_val == 0 or np.isnan(base_val):
             continue
 
-        sim_plus_minus_results = sim_plus_minus(key, x0, parameters, constants, time_stamps, var_names, perturbation=perturbation, base_val=base_val)
+        sim_plus_minus_results = sim_plus_minus(key=key,
+                                                x0=x0,
+                                                parameters=parameters,
+                                                time_stamps=time_stamps,
+                                                base_val=base_val)
+        
         if sim_plus_minus_results is None:
             print(f"!!!!!!!!!!!!!               Validation Analysis for parameter {key} failed. Please check the parameters and initial conditions.")
             return None
@@ -294,36 +303,48 @@ def compute_sensitivity(x0, parameters, constants, time_stamps, perturbation, va
     sensitivity_df.drop(columns='Mean', inplace=True)
 
 
-    fig, axes = plt.subplots(len(var_names), 1, figsize=(10, 12), sharey=False)
+    # fig, axes = plt.subplots(len(var_names), 1, figsize=(10, 12), sharey=False)
 
-    for i, state in enumerate(sensitivity_df.columns):
-        axes[i].bar(sensitivity_df.index, sensitivity_df[state], color='red')
-        axes[i].set_title(f'State {state}')
-        axes[i].set_ylabel('Sensitivity')
-        axes[i].set_xticks(range(len(sensitivity_df.index)))
-        axes[i].set_xticklabels(sensitivity_df.index, rotation=90, ha='right')
-        axes[i].grid(True, axis='y', linestyle='-', alpha=0.6)
+    # for i, state in enumerate(sensitivity_df.columns):
+    #     axes[i].bar(sensitivity_df.index, sensitivity_df[state], color='red')
+    #     axes[i].set_title(f'State {state}')
+    #     axes[i].set_ylabel('Sensitivity')
+    #     axes[i].set_xticks(range(len(sensitivity_df.index)))
+    #     axes[i].set_xticklabels(sensitivity_df.index, rotation=90, ha='right')
+    #     axes[i].grid(True, axis='y', linestyle='-', alpha=0.6)
 
-    axes[-1].set_xlabel('Parameter')
-    plt.tight_layout()
-    plt.show()
+    # axes[-1].set_xlabel('Parameter')
+    # plt.tight_layout()
+    # plt.show()
 
 
-    top5_df = sensitivity_df.sum(axis=1).nlargest(5)
-    top5_keys = top5_df.index
-    top5_plot_df = sensitivity_df.loc[top5_keys]
+    # top5_df = sensitivity_df.sum(axis=1).nlargest(5)
+    # top5_keys = top5_df.index
+    # top5_plot_df = sensitivity_df.loc[top5_keys]
 
-    palette = sns.color_palette("Set2", n_colors=sensitivity_df.shape[1])
-    top5_plot_df.plot(kind='barh', stacked=True, color=palette)
-    plt.gca().invert_yaxis()
-    plt.xlabel('Mean relative sensitivity')
-    plt.title('5 most sensitive parameters')
-    plt.legend(title='Output variable')
-    plt.tight_layout()
-    plt.show()
+    # palette = sns.color_palette("Set2", n_colors=sensitivity_df.shape[1])
+    # top5_plot_df.plot(kind='barh', stacked=True, color=palette)
+    # plt.gca().invert_yaxis()
+    # plt.xlabel('Mean relative sensitivity')
+    # plt.title('5 most sensitive parameters')
+    # plt.legend(title='Output variable')
+    # plt.tight_layout()
+    # plt.show()
 
     return sensitivity_df
 
 
 
-
+def format_number(x, decimals=3):
+    """
+    Formats a number (int, float, or numpy float) to a string with given decimal places.
+    If not a number, returns as-is.
+    """
+    if x is None:
+        return None
+    if isinstance(x, list) and len(x) == 1:
+        x = x[0]
+    try:
+        return f"{float(x):.{decimals}f}"
+    except (ValueError, TypeError):
+        return x

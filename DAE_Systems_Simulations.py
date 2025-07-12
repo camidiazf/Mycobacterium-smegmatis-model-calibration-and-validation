@@ -1,10 +1,11 @@
 import casadi as ca # type: ignore
 import numpy as np
 import pandas as pd
+from System_info import system_info as system_data
 
 
 # Growth dynamics function
-def DAE_system(t, x, z, params, constants):
+def DAE_system(t, x, z, params):
     """
     Function to define the DAE system for the growth dynamics.
     Parameters:
@@ -16,7 +17,9 @@ def DAE_system(t, x, z, params, constants):
     Returns:
         - dXdt: vector of differential equations.
     
+    
     """
+    constants = system_data['constants']
     # State variables
     X, C, N, CO2, O = x[0], x[1], x[2], x[3], x[4]
     # Algebraic variable
@@ -51,7 +54,7 @@ def DAE_system(t, x, z, params, constants):
 
     
 
-def DAE_system_calibrating(t, x, z, p, parameters, constants, param_list):
+def DAE_system_calibrating(t, x, z, p, parameters, param_list):
     """
     Function to define the DAE system for calibration.
     Parameters:
@@ -75,7 +78,7 @@ def DAE_system_calibrating(t, x, z, p, parameters, constants, param_list):
 
 
     """
-
+    constants = system_data['constants']
     for key, value in parameters.items():
         globals()[key] = value
     
@@ -108,7 +111,7 @@ def DAE_system_calibrating(t, x, z, p, parameters, constants, param_list):
     return ca.vertcat(dXdt, dCdt, dNdt, dCO2dt, dOdt)
 
 
-def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None, param_list=None):
+def simulate_model(simulation_type, x0, parameters, time, p_vars=None, param_list=None):
     """
     Function to simulate the DAE system.
     Parameters:
@@ -123,6 +126,7 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
         - df_results: DataFrame with the simulation results.
 
     """
+    constants = system_data['constants']
     # Symbolic variables
     t = ca.MX.sym('t')
     x = ca.MX.sym('x', 5)  # [X, C, N, CO2, O2]
@@ -130,9 +134,9 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
 
     # Systems's differential equations
     if simulation_type == 'calibrating':
-        dxdt = DAE_system_calibrating(t, x, z, p_vars, parameters, constants, param_list)
+        dxdt = DAE_system_calibrating(t, x, z, p_vars, parameters, param_list)
     elif simulation_type == 'normal':
-        dxdt = DAE_system(t, x, z, parameters, constants) 
+        dxdt = DAE_system(t, x, z, parameters) 
 
     # Algebraic equation
     # Parameters
@@ -212,10 +216,9 @@ def simulate_model(simulation_type, x0, parameters, constants, time, p_vars=None
     df_results = pd.DataFrame(dict_results)
     return df_results
 
-def define_cost_function(system_data, var_names, params_list):
+def define_cost_function(var_names, params_list):
     x0_exp = system_data['x0_exp']
     parameters_og = system_data['parameters_og']
-    constants = system_data['constants']
     t_exp = system_data['t_exp']
     df_exp = system_data['df_exp']
 
@@ -224,7 +227,6 @@ def define_cost_function(system_data, var_names, params_list):
             df_results = simulate_model(simulation_type='calibrating', 
                                         x0=x0_exp, 
                                         parameters=parameters_og, 
-                                        constants=constants, 
                                         time=t_exp,
                                         p_vars=p_vars,
                                         param_list=params_list

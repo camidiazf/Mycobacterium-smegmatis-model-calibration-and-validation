@@ -5,7 +5,7 @@ import seaborn as sns
 import copy
 import time
 import os
-
+import itertools
 
 from scipy import stats
 
@@ -13,13 +13,32 @@ from mealpy import FloatVar, PSO # type: ignore
 from mealpy.utils.problem import FloatVar # type: ignore
 from mealpy.swarm_based import PSO # type: ignore
 
-from System_info import system_info
+from System_info import system_info as system_data
 from Analysis_functions import validation_analysis, parameter_analysis
-from Aux_Functions import define_cost_function
+from Aux_Functions import define_cost_function, format_number
+
+import sys
+import contextlib
+
+@contextlib.contextmanager
+def suppress_all_output():
+    with open(os.devnull, 'w') as fnull:
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = fnull
+        sys.stderr = fnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
 
 
-def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, params_list, lb, ub):
+
+
+def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
+    
     if os.path.exists(path):
         os.remove(path)
         print(f">>> Existing file {path!r} removed | starting fresh")
@@ -27,259 +46,301 @@ def RUN_MAIN(iterations, path, perturbation, delta, correlation_threshold, param
     df = pd.DataFrame()
     print(">>> Starting with empty DataFrame")
 
-    df.to_excel(path, index=False)
-    print(f">>> Written new file {path!r}")
-        
-    sensitivity_df_all = []
-    corr_matrix_all = []
-    residuals_all = []
-
-    for i in range(iterations):
-        print("")
-        print("")
-        print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
-        print("")
-    
-        Results = RUN_DAE_CALIBRATION(iteration = i, 
-                                perturbation = perturbation, 
-                                delta = delta,
-                                correlation_threshold = correlation_threshold, 
-                                params_list = params_list,
-                                lb = lb,
-                                ub = ub)
-        
-        FINAL_RESULTS = Results['FINAL RESULTS']
-        sensitivity_df = Results['SENSITIVITY']
-        corr_matrix = Results['CORRELATION MATRIX']
-        residuals = Results['RESIDUALS']
-
-        if FINAL_RESULTS is None:
-            if i == 0:
-                print("!!!!!!!!!!!!!               Initial run failed. Please check the parameters and initial conditions.")
-                return None
-            else:
-                print(f"!!!!!!!!!!!!!               Iteration {i+1} failed. Skipping to next iteration.")
-                continue
-            
-
-        if i == 0:
-            run_name = "Original Model"
-        else:
-            run_name = f"Model{i+1}"
-            if sensitivity_df is not None:
-                sensitivity_df_all.append(sensitivity_df)
-
-            else:
-                print('Not adding sensitivity data for this iteration, it is None')
-            if corr_matrix is not None:
-                corr_matrix_all.append(corr_matrix)
-            else:
-                print('Not adding correlation matrix for this iteration, it is None')
-            if residuals is not None:
-                residuals_all.append(residuals)
-            else:
-                print('Not adding residuals for this iteration, it is None')
-                
-
-            
-        FINAL_RESULTS.insert(0, 'Model_', run_name)
-
-        before = df.shape[0]
-        df = pd.concat([df, FINAL_RESULTS], ignore_index=True)
-        after = df.shape[0]
-        print(" ")
-        print(f"Appended row, df rows went {before} → {after}")
-
-        df.to_excel(path, index=False)
-        print(f"Saved to {path}")
-    
-    print(" ")
-    print(" ")
-    print(" ")
-
-    print(" ALL ITERATIONS DONE — final df shape:", df.shape)
-
-    
-    print(" ")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print(f"------------------------------- SUMMARY OF {params_list} CALIBRATION --------------------------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print(" ")
-
-    RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
-
-
-    return FINAL_RESULTS
-
-
-def RUN_DAE_CALIBRATION(iteration, perturbation, delta, correlation_threshold, params_list, lb, ub):
-    """
-
-    """
-
-    system_data = system_info
-
-    var_names = system_data['var_names']
-
     parameters_og = system_data['parameters']
+
+    column_names = []
+
+    columns_values = []
+    columns_t_values = []
+    for key, value in parameters_og.items():
+        columns_values.append(key)
+        columns_t_values.append('t_value_'+ key)
+
+    columns_var_validation = []
+    var_names = system_data['var_names']
+    for var in var_names:
+        columns_var_validation.append('RMSE_'+ var)
+        columns_var_validation.append('NMRSE_'+ var)
+        columns_var_validation.append('MAPE_'+ var)
     
+    column_names.extend(['Model', 'Param Combo', 'lb', 'ub'])
+    column_names.extend(columns_values)
+    column_names.extend(columns_t_values)
+    column_names.extend(columns_var_validation)
+    column_names.extend(['AIC', 'BIC', 'RMSE', 'NMRSE', 'MAPE'])
+
+    df = pd.DataFrame(columns=column_names)
+
+    initial_results = RUN_INITIAL()
+    row_data = ['Original', '', '','']
+    row_data.extend(initial_results)
+    df.loc[len(df)] = row_data
+    df.to_excel(path, index=False)
+    print(f">>> Row {len(df)} written to file")
+
+    j = 0
+    for r in range(1, len(params_list) + 1):
+        param_subsets = list(itertools.combinations(params_list, r))
+        for param_combo in param_subsets:
+            indices = [params_list.index(p) for p in param_combo]
+            pair_lists = [
+                [(a, b) for a, b in itertools.product(param_ranges[p], param_ranges[p]) if a < b]
+                for p in param_combo
+            ]
+            all_bound_combos = list(itertools.product(*pair_lists))
+
+            for combo in all_bound_combos:
+                lb = [pair[0] for pair in combo]
+                ub = [pair[1] for pair in combo]
+                print(' ')
+                # print(' ')
+                # print(' ')
+                print(f"\n>>> RUN_SCENARIO with parameters: {param_combo}")
+                print(f"    lb = {format_number(lb)}")
+                print(f"    ub = {format_number(ub)}")
+                # print(' ')
+
+                final_results_escenario = RUN_SCENARIO(iterations=n,
+                                        params_list=list(param_combo),
+                                        lb=lb,
+                                        ub=ub
+                                        )
+                scenario_rows = []
+                for g in range(len(final_results_escenario)):
+                    row_data = [f"Model_{r}_iteration_{g+1}", str(param_combo), str(format_number(lb)), str(format_number(ub))]
+                    row_data.extend(final_results_escenario[g])
+                    scenario_rows.append(row_data)
     
+                df = pd.concat([df, pd.DataFrame(scenario_rows, columns=df.columns)], ignore_index=True)
+                df.to_excel(path, index=False)
+                print(f">>> Row {len(df)} written to file")
+                j += 1
+    print(j)
 
-    if iteration == 0:
-        print(" ")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print("----------------------------------------------------- ORIGINAL MODEL -----------------------------------------------------")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print(" ")
-
-
-        parameters_initial_dict = {}
-        for key, value in parameters_og.items():
-            if key in params_list:
-                parameters_initial_dict[key + '_value'] = value
-        df_parameters_value= pd.DataFrame([parameters_initial_dict])
-
-
-        ANALYSIS_RESULTS = RUN_ANALYSIS(system_data=system_data,
-                                        perturbation=perturbation,
-                                        correlation_threshold=correlation_threshold,
-                                        delta = delta,
-                                        parameters=parameters_og,
-                                        var_names=var_names,
-                                        params_list=params_list,
-                                        type="initial")
-
-
-
-
-    else:
-        print(" ")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print(" ")
-
-
-        
-        problem = {
-        "obj_func": define_cost_function(system_data=system_data,
-                                            var_names=var_names,
-                                            params_list=params_list),
-        "bounds": FloatVar(lb=lb, ub=ub),
-        "minmax": "min"
-        }
-        pso = PSO.OriginalPSO(epoch=100, pop_size=50, c1=1.5, c2=1.5, w=0.5)
-        start = time.perf_counter()
-
-        g_best = pso.solve(problem)
-
-        end = time.perf_counter()
-        
-        print("Optimization Results:")
-        print("     Best Solutions: ", g_best.solution)
-        print("     Minimum Error:", g_best.target.fitness)
-        print(f"     Optimization Time: {end - start:.2f} s")
-        
-
-        print(" ")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration +1} -------------------------------------------------")
-        print("--------------------------------------------------------------------------------------------------------------------------")
-        print(" ")
-
-        new_params = g_best.solution
-        new_params_dict = dict(zip(params_list, new_params))
-        parameters_updated = copy.deepcopy(parameters_og)
-        
-        param_dict = {}
-        
-        i_param = 0
-        for i_param in range(len(params_list)):
-            key = params_list[i_param]
-            new_value = new_params_dict[key]
-            parameters_updated[key] = new_value
-            param_dict[key + '_value'] = new_value
-            upper_limit = True
-            lower_limit = True
-
-            if abs((abs(new_value) - abs(ub[i_param]))) < 1e-3:
-                print(f"!!!       Warning: Parameter '{key}' reached its upper limit ({ub[i_param]}).")
-                upper_limit = False
-            if abs((abs(new_value) - abs(lb[i_param]))) < 1e-3:
-                print(f"!!!       Warning: Parameter '{key}' reached its lower limit ({lb[i_param]}).")                
-                lower_limit = False
-            if upper_limit and lower_limit:
-                print(f"Parameter '{key}' is between the limits ({lb[i_param]}, {ub[i_param]}).")
-        
-        df_new_params = pd.DataFrame({
-            "Parameter": params_list,
-            "Original": [parameters_og[key] for key in params_list],
-            "New": [parameters_updated[key] for key in params_list]})
-        print(df_new_params)
-
-        df_parameters_value = pd.DataFrame([param_dict])
-        # df_parameters_value or paramsupdates ?????????????????????????????????/ for val in RUN
-
-        ANALYSIS_RESULTS = RUN_ANALYSIS(system_data=system_data,
-                                        perturbation=perturbation,
-                                        correlation_threshold=correlation_threshold,
-                                        delta = delta,
-                                        parameters=parameters_updated,
-                                        var_names=var_names,
-                                        params_list=params_list,
-                                        type="new")
-
+    return df
     
+def RUN_INITIAL():
+    parameters_og = system_data['parameters']
+    parameters_og_list = system_data['parameters_og_list']
 
 
+    # print(" ")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    print("----------------------------------------------------- ORIGINAL MODEL -----------------------------------------------------")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    # print(" ")
+
+    parameters_og_values = [parameters_og[key] for key in parameters_og_list]
+
+    ANALYSIS_RESULTS = RUN_ANALYSIS(iteration = None,
+                                    parameters=parameters_og,
+                                    params_list=parameters_og_list)
+    
     validation_results = ANALYSIS_RESULTS['validation_results']
-    t_values_FIM = ANALYSIS_RESULTS['t_values_FIM']
+    t_values = ANALYSIS_RESULTS['t_values']
+    t_values_formatted = [format_number(x) for x in t_values]
+    validation_results_formatted = [format_number(x) for x in validation_results]
     corr_matrix = ANALYSIS_RESULTS['correlation_matrix']
     sensitivity_df = ANALYSIS_RESULTS['sensitivity']
     residuals = ANALYSIS_RESULTS['residuals']
 
-    final_results = pd.concat([df_parameters_value, validation_results, t_values_FIM], axis=1)
-    return {'FINAL RESULTS' : final_results,
-            'SENSITIVITY' : sensitivity_df,
-            'CORRELATION MATRIX' : corr_matrix,
-            'RESIDUALS' : residuals
-            }
+    final_results_initial = parameters_og_values + t_values_formatted + validation_results_formatted
+
+    return final_results_initial
+
+def RUN_SCENARIO(iterations, params_list, lb, ub):
+
+    sensitivity_df_all = []
+    corr_matrix_all = []
+    residuals_all = []
+    final_results_escenario = []
+
+    for i in range(iterations):
+        # print("")
+        # print("")
+        # print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
+        # print("")
+        
+        
+        Results = RUN_PSO_CALIBRATION(iteration = i, 
+                                params_list = params_list,
+                                lb = lb,
+                                ub = ub)
+        final_result_iteration = Results['FINAL RESULTS']
+        final_results_escenario.append(final_result_iteration)
+        sensitivity_df = Results['SENSITIVITY']
+        corr_matrix = Results['CORRELATION MATRIX']
+        residuals = Results['RESIDUALS']
+
+        if sensitivity_df is not None:
+            sensitivity_df_all.append(sensitivity_df)
+        else:
+            print('Not adding sensitivity data for this iteration, it is None')
+        if corr_matrix is not None:
+            corr_matrix_all.append(corr_matrix)
+        else:
+            print('Not adding correlation matrix for this iteration, it is None')
+        if residuals is not None:
+            residuals_all.append(residuals)
+        else:
+            print('Not adding residuals for this iteration, it is None')
+
+    # print(" ")
+    # print(" ")
+    print(" ")
+
+    print(" ALL ITERATIONS FOR COMBO DONE ")
+
+    
+    # print(" ")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    # print(f"------------------------------- SUMMARY OF {params_list} CALIBRATION --------------------------------------------")
+    # print(f"------------------------------- Lower Bounds: {lb} ----------------------------------------------------------")
+    # print(f"------------------------------- Upper Bounds: {ub} ----------------------------------------------------------")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+
+    # print(" ")
+
+    # RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
+    return final_results_escenario
+
+
+def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
+    """
+    
+    """
+
+    parameters_og = system_data['parameters']
+    parameters_og_list = system_data['parameters_og_list']
+
+        
+
+    # print(" ")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    # print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    # print(" ")
+
+
+    
+    problem = {
+    "obj_func": define_cost_function(params_list=params_list),
+    "bounds": FloatVar(lb=lb, ub=ub),
+    "minmax": "min"
+    }
+    pso = PSO.OriginalPSO(epoch=100, pop_size=50, c1=1.5, c2=1.5, w=0.5)
+    
+    
+    start = time.perf_counter()
+    with suppress_all_output():
+
+        g_best = pso.solve(problem)
+
+    end = time.perf_counter()
+    
+    print("Optimization Results:")
+    print("     Best Solutions: ", g_best.solution)
+    print("     Minimum Error:", g_best.target.fitness)
+    print(f"     Optimization Time: {end - start:.2f} s")
+    
+
+    print(" ")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration +1} -------------------------------------------------")
+    # print("--------------------------------------------------------------------------------------------------------------------------")
+    # print(" ")
+    
+    new_params = g_best.solution
+    new_params_dict = dict(zip(params_list, new_params))
+    parameters_updated = copy.deepcopy(parameters_og)
+    
+    parameters_values = []
+    i_param = 0
+    for param in parameters_og_list:
+        if param not in params_list:
+            parameters_updated[param] = parameters_og[param]
+            parameters_values.append(None)
+        else:
+            new_value = new_params_dict[param]
+            parameters_updated[param] = new_value
+            parameters_values.append(new_value)
+            upper_limit = True
+            lower_limit = True
+            if abs((abs(new_value) - abs(ub[i_param]))) < 1e-3:
+                print(f"!!!       Warning: Parameter '{param}' reached its upper limit ({format_number(ub[i_param])}).")
+                upper_limit = False
+            if abs((abs(new_value) - abs(lb[i_param]))) < 1e-3:
+                print(f"!!!       Warning: Parameter '{param}' reached its lower limit ({format_number(lb[i_param])}).")                
+                lower_limit = False
+            if upper_limit and lower_limit:
+                print(f"Parameter '{param}' is between the limits ({format_number(lb[i_param])}, {format_number(ub[i_param])}).")
+            i_param += 1
+
+        parameters_values_formatted = [format_number(x) for x in parameters_values]
+
+
+    df_new_params = pd.DataFrame({
+        "Parameter": params_list,
+        "Original": [parameters_og[key] for key in params_list],
+        "New": [parameters_updated[key] for key in params_list]})
+    print(df_new_params)
+
+    ANALYSIS_RESULTS = RUN_ANALYSIS(iteration = iteration,
+                                    parameters=parameters_updated,
+                                    params_list=params_list)
+
+
+
+
+    validation_results = ANALYSIS_RESULTS['validation_results']
+    validation_results_formatted = [format_number(x) for x in validation_results]
+    t_values = ANALYSIS_RESULTS['t_values']
+    t_values_formatted = [format_number(x) for x in t_values]
+
+    corr_matrix = ANALYSIS_RESULTS['correlation_matrix']
+    sensitivity_df = ANALYSIS_RESULTS['sensitivity']
+    residuals = ANALYSIS_RESULTS['residuals']
+
+    final_results_escenario = parameters_values_formatted + t_values_formatted + validation_results_formatted
+    return {'FINAL RESULTS' : final_results_escenario,
+                'SENSITIVITY' : sensitivity_df,
+                'CORRELATION MATRIX' : corr_matrix,
+                'RESIDUALS' : residuals
+                }
 
 
 
 
 
-def RUN_ANALYSIS(system_data, perturbation, correlation_threshold, delta, parameters, var_names, params_list, type):
+def RUN_ANALYSIS(iteration, parameters, params_list):
+    parmeters_og_list = system_data['parameters_og_list']
+    if iteration is None:
+        params_list = []
     
     # Run validation analysis, if initial, use original parameters
-    val_analysis = validation_analysis(system_data = system_data,
-                                                            var_names = var_names,
-                                                            parameters = parameters,
-                                                            params_list= params_list,
-                                                            type = type)
+    val_analysis = validation_analysis(iteration = iteration,
+                                        parameters = parameters,
+                                        params_list= params_list)
         
     validation_results = val_analysis['Validation results']
     residuals = val_analysis['Residuals']
 
-    param_analysis = parameter_analysis(perturbation = perturbation, 
-                                        correlation_threshold = correlation_threshold,
+    param_analysis = parameter_analysis(iteration = iteration,
                                         params_list = params_list,
-                                        parameters = parameters,
-                                        delta = delta,
-                                        type = type)
+                                        parameters = parameters)
     if param_analysis is None:
         print("!!!!!!!!!!!!!               Parameter Analysis failed. Please check the parameters and initial conditions.")
-        t_values_FIM = None
+        t_values = [None] * len(parmeters_og_list)
         corr_matrix = None
         sensitivity_df = None
     else:
-        t_values_FIM = param_analysis['t_values']
+        t_values = param_analysis['t_values']
         corr_matrix = param_analysis['correlation_matrix']
         sensitivity_df = param_analysis['sensitivity']
 
     return {'validation_results': validation_results,
             'residuals': residuals,
-            't_values_FIM': t_values_FIM,
+            't_values': t_values,
             'correlation_matrix': corr_matrix,
             'sensitivity': sensitivity_df}
 
@@ -386,9 +447,7 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
     if corr_matrix_all is None or len(corr_matrix_all) == 0 or corr_matrix_all == []:
         print("No correlation matrix data available for plotting.")
     else:
-        system_data = system_info
-        parameters_og = system_data['parameters']
-        params = list(parameters_og.keys())
+        parameters_og_list = system_data['parameters_og_list']
         # 2.4 Correlation-matrix heatmap with mean±σ annotations
         corr_stack = np.stack(corr_matrix_all, axis=0)
         mean_corr  = corr_stack.mean(axis=0)
@@ -406,8 +465,8 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
         sns.heatmap(mean_corr,
                     annot=annot,
                     fmt="",
-                    xticklabels=params,
-                    yticklabels=params,
+                    xticklabels=parameters_og_list,
+                    yticklabels=parameters_og_list,
                     cmap="coolwarm",
                     center=0,
                     annot_kws={"fontsize":10, 'fontweight':'bold'})
