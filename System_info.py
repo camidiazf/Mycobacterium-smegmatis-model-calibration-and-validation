@@ -66,7 +66,7 @@ constants = {'pka1': 6.86, # pKa of KH2PO4
 df_exp = pd.read_excel('Experimental_data.xlsx', sheet_name='PE_Normal')
 df_val = pd.read_excel('Experimental_data.xlsx', sheet_name='V_Normal')
 
-# Initial conditions simulation PE
+# Initial conditions simulation PE (PARAMETER ESTIMATION)
 X0 = 0.229
 c0 = 5.389
 n0 = 0.951
@@ -76,7 +76,7 @@ o20 = 0.0001
 z0 =7.2
 x0_sim = np.array([X0, c0, n0, co20, o20, z0])
 
-# Initial conditions simulation VAL
+# Initial conditions simulation VAL (PARAMETER VALIDATION
 X0 = 0.223
 c0 = 5.992
 n0 = 1.027
@@ -86,7 +86,7 @@ o20 = 0.0001
 z0 = 7.2
 x0_sim_v = np.array([X0, c0, n0, co20, o20, z0])
 
-# Initialtions experimental PE
+# Initial points experimental PE
 
 X0 = df_exp['X'][0]  
 c0 = df_exp['C'][0] 
@@ -99,12 +99,13 @@ x0_exp = np.array([X0, c0, n0, co20, o20, z0])
 # Experimental time parameters PE
 t_exp = df_exp['Time (Hours)']
 
-# Initialtions experimental VAL
+# Initial points experimental VAL
 X0_v = df_val['X'][0]  
 c0_v = df_val['C'][0] 
 n0_v = df_val['N'][0] 
 co20_v = 0.439 / 1000
-o20_v = parameters['O2_sat']  # O2 saturation in g/L
+# o20_v = parameters['O2_sat']  # O2 saturation in g/L
+o20_v = 0.0001
 z0_v = df_val['pH'][0]  
 x0_exp_v = np.array([X0_v, c0_v, n0_v, co20_v, o20_v, z0_v]) 
 
@@ -120,8 +121,6 @@ weights_exp_stack = np.vstack([
 
 # Experimental time parameters PE
 t_exp_v = df_exp['Time (Hours)']
-
-
 
 
 # Calibration DATA
