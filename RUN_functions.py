@@ -20,6 +20,10 @@ from Aux_Functions import define_cost_function, format_number
 import sys
 import contextlib
 
+
+# Suppress all output from PSO Optimization to avoid cluttering the console during optimization
+# Comment this out if you want to see the output from PSO
+# Note: This will suppress all output, including errors in the optimization, so use with caution.
 @contextlib.contextmanager
 def suppress_all_output():
     with open(os.devnull, 'w') as fnull:
@@ -38,6 +42,25 @@ def suppress_all_output():
 
 
 def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
+    """
+    Parameters:
+        - n: int, number of iterations for each parameter combination
+        - path: str, path to save the results Excel file
+        - params_list: list of str, names of the parameters to be calibrated
+        - param_ranges: dict, dictionary with parameter names as keys and their ranges as values (list of tuples with lower and upper bounds)
+    Returns:
+        - df: pandas DataFrame, containing the results of the parameter calibration and validation
+    Steps:
+        1. Check if the file at `path` exists, if so, remove it to start fresh.
+        2. Create an empty DataFrame with the necessary columns.
+        3. Run the initial model with original parameters and store results.
+        4. Iterate through all combinations of parameters and their ranges.
+        5. For each combination, run the scenario and store results in the DataFrame.
+        6. Save the DataFrame to an Excel file at `path`.
+        7. Return the DataFrame with all results.
+
+
+    """
     
     if os.path.exists(path):
         os.remove(path)
@@ -120,15 +143,28 @@ def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
     return df
     
 def RUN_INITIAL():
+    """ 
+    Runs the initial model with original parameters and returns the results.
+    This function retrieves the original parameters from the system data, runs the analysis,
+    and formats the results for output.
+    Returns:
+        - final_results_initial: list, containing the original parameters, t-values, and validation results.
+    Steps:
+        1. Retrieve the original parameters and their list from the system data.
+        2. Run the analysis using the original parameters.
+        3. Format the t-values and validation results for output.
+        4. Combine the original parameters, t-values, and validation results into a final results list.
+        5. Return the final results list.
+
+    """
     parameters_og = system_data['parameters']
     parameters_og_list = system_data['parameters_og_list']
 
-
-    # print(" ")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
+    print(" ")
+    print("--------------------------------------------------------------------------------------------------------------------------")
     print("----------------------------------------------------- ORIGINAL MODEL -----------------------------------------------------")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
-    # print(" ")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(" ")
 
     parameters_og_values = [parameters_og[key] for key in parameters_og_list]
 
@@ -149,6 +185,24 @@ def RUN_INITIAL():
     return final_results_initial
 
 def RUN_SCENARIO(iterations, params_list, lb, ub):
+    """ 
+    Runs the scenario for parameter calibration and validation using PSO optimization.
+    Parameters:
+        - iterations: int, number of iterations to run the PSO optimization.
+        - params_list: list of str, names of the parameters to be calibrated.
+        - lb: list of float, lower bounds for the parameters.
+        - ub: list of float, upper bounds for the parameters.
+    Returns:
+        - final_results_escenario: list of lists, containing the results for each iteration.
+    Steps:
+        1. Initialize empty lists to store results from all iterations.
+        2. Loop through the number of iterations:
+        3. Print the current iteration number.
+        4. Call the `RUN_PSO_CALIBRATION` function with the current iteration, parameters, and bounds.
+        5. Append the results from each iteration to the respective lists
+        6. Print a summary of the calibration results, including parameter names and bounds.
+        7. Return the final results for all iterations as a list of lists.
+    """
 
     sensitivity_df_all = []
     corr_matrix_all = []
@@ -156,11 +210,10 @@ def RUN_SCENARIO(iterations, params_list, lb, ub):
     final_results_escenario = []
 
     for i in range(iterations):
-        # print("")
-        # print("")
-        # print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
-        # print("")
-        
+        print("")
+        print("")
+        print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
+        print("")
         
         Results = RUN_PSO_CALIBRATION(iteration = i, 
                                 params_list = params_list,
@@ -185,51 +238,61 @@ def RUN_SCENARIO(iterations, params_list, lb, ub):
         else:
             print('Not adding residuals for this iteration, it is None')
 
-    # print(" ")
-    # print(" ")
+    print(" ")
+    print(f"                                 ...... ALL ITERATIONS FOR COMBO DONE ......                                   ")    
     print(" ")
 
-    print(" ALL ITERATIONS FOR COMBO DONE ")
 
-    
-    # print(" ")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
-    # print(f"------------------------------- SUMMARY OF {params_list} CALIBRATION --------------------------------------------")
-    # print(f"------------------------------- Lower Bounds: {lb} ----------------------------------------------------------")
-    # print(f"------------------------------- Upper Bounds: {ub} ----------------------------------------------------------")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(f"------------------------------- SUMMARY OF {params_list} CALIBRATION --------------------------------------------")
+    print(f"------------------------------- Lower Bounds: {lb} ----------------------------------------------------------")
+    print(f"------------------------------- Upper Bounds: {ub} ----------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(" ")
 
-    # print(" ")
+    RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
 
-    # RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
     return final_results_escenario
 
 
 def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
     """
-    
+    Runs the PSO optimization for parameter calibration and validation.
+    Parameters:
+        - iteration: int, current iteration number for the calibration.
+        - params_list: list of str, names of the parameters to be calibrated.
+        - lb: list of float, lower bounds for the parameters.
+        - ub: list of float, upper bounds for the parameters.
+    Returns:
+        - final_results_escenario: dict, containing the final results of the calibration and validation.
+    Steps:
+        1. Retrieve the original parameters and their list from the system data.
+        2. Print the current iteration number and the parameters being calibrated.
+        3. Define the PSO optimization problem with the objective function, bounds, and minimization goal.
+        4. Initialize the PSO optimizer with specified parameters.
+        5. Suppress all output from the PSO optimization to avoid cluttering the console.
+        6. Solve the PSO optimization problem and get the best solution and minimum error.
+        7. Print the optimization results, including best solutions, minimum error, and optimization time.
+        8. Update the original parameters with the new values obtained from PSO optimization.
+        9. Run analysis on the updated parameters and store results in a dictionary.
+        10. Return a dictionary containing final results, sensitivity analysis, correlation matrix, and residuals.
     """
 
     parameters_og = system_data['parameters']
     parameters_og_list = system_data['parameters_og_list']
 
-        
+    print(" ")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(" ")
 
-    # print(" ")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
-    # print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
-    # print(" ")
-
-
-    
     problem = {
     "obj_func": define_cost_function(params_list=params_list),
     "bounds": FloatVar(lb=lb, ub=ub),
     "minmax": "min"
     }
     pso = PSO.OriginalPSO(epoch=100, pop_size=50, c1=1.5, c2=1.5, w=0.5)
-    
     
     start = time.perf_counter()
     with suppress_all_output():
@@ -242,13 +305,12 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
     print("     Best Solutions: ", g_best.solution)
     print("     Minimum Error:", g_best.target.fitness)
     print(f"     Optimization Time: {end - start:.2f} s")
-    
 
     print(" ")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------------------------")
     print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration +1} -------------------------------------------------")
-    # print("--------------------------------------------------------------------------------------------------------------------------")
-    # print(" ")
+    print("--------------------------------------------------------------------------------------------------------------------------")
+    print(" ")
     
     new_params = g_best.solution
     new_params_dict = dict(zip(params_list, new_params))
@@ -278,7 +340,6 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
 
         parameters_values_formatted = [format_number(x) for x in parameters_values]
 
-
     df_new_params = pd.DataFrame({
         "Parameter": params_list,
         "Original": [parameters_og[key] for key in params_list],
@@ -288,10 +349,7 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
     ANALYSIS_RESULTS = RUN_ANALYSIS(iteration = iteration,
                                     parameters=parameters_updated,
                                     params_list=params_list)
-
-
-
-
+    
     validation_results = ANALYSIS_RESULTS['validation_results']
     validation_results_formatted = [format_number(x) for x in validation_results]
     t_values = ANALYSIS_RESULTS['t_values']
@@ -308,11 +366,25 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
                 'RESIDUALS' : residuals
                 }
 
-
-
-
-
 def RUN_ANALYSIS(iteration, parameters, params_list):
+    """ 
+    Runs the validation and parameter analysis for the given parameters.
+    Parameters:
+        - iteration: int, current iteration number for the analysis.
+        - parameters: dict, dictionary containing the parameters to be analyzed.
+        - params_list: list of str, names of the parameters to be analyzed.
+    Returns:
+        - analysis_results: dict, containing validation results, residuals, t-values, correlation matrix, and sensitivity analysis.
+    Steps:
+        1. Retrieve the original parameters list from the system data.
+        2. If iteration is None, initialize an empty params_list.
+        3. Run validation analysis using the provided parameters and iteration.
+        4. Extract validation results and residuals from the validation analysis.
+        5. Run parameter analysis using the provided parameters and iteration.
+        6. If parameter analysis fails, set t-values, correlation matrix, and sensitivity DataFrame to None.
+        7. Otherwise, extract t-values, correlation matrix, and sensitivity DataFrame from the parameter analysis.
+        8. Return a dictionary containing validation results, residuals, t-values, correlation matrix, and sensitivity DataFrame.
+    """
     parmeters_og_list = system_data['parameters_og_list']
     if iteration is None:
         params_list = []
@@ -347,15 +419,21 @@ def RUN_ANALYSIS(iteration, parameters, params_list):
 
 
 def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
-    # — Stack data from all iterations —
-    # sensitivity_df_all: list of pandas.DataFrame (shape: n_params × n_states)
-    # corr_matrix_all:   list of numpy.ndarray (shape: n_params × n_params)
-    # residuals_all:     list of numpy.ndarray
+    """ 
+    Generates summary plots for sensitivity analysis, residuals, and correlation matrix.
+    Parameters:
+        - sensitivity_df_all: list of pandas DataFrame, containing sensitivity data from all iterations.
+        - corr_matrix_all: list of numpy.ndarray, containing correlation matrices from all iterations.
+        - residuals_all: list of numpy.ndarray, containing residuals from all iterations.
+    Returns:
+        - None, displays plots for sensitivity analysis, residuals, and correlation matrix.
+    """
+    
+    # Sensitivity Analysis Plot
     if sensitivity_df_all is None or len(sensitivity_df_all) == 0 or sensitivity_df_all == []:
         print("No sensitivity data available for plotting.")
     else:
         
-        # 1) Sensitivity Bar‐Plots with ±1σ Error Bars
         stacked_sens = np.stack([df.values for df in sensitivity_df_all], axis=0)  # (n_iter, n_params, n_states)
         mean_sens = stacked_sens.mean(axis=0)
         std_sens  = stacked_sens.std(axis=0)
@@ -379,11 +457,10 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
         plt.tight_layout()
         plt.show()
 
-
+    # Residuals Histogram and Q-Q Plot
     if residuals_all is None or len(residuals_all) == 0 or residuals_all == []:
         print("No residuals data available for plotting.")
     else:
-        # 2.2 Residuals histogram with ±1σ shading and normal fit curve
         all_res    = np.concatenate(residuals_all)
         mu_all, std_all = stats.norm.fit(all_res)
 
@@ -396,7 +473,6 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-        # Left: histogram with ±1σ error bars and normal‐fit curve
         ax0 = axes[0]
         ax0.bar(bin_centers,
                 mean_den,
@@ -418,7 +494,6 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
         ax0.legend()
         ax0.grid(alpha=0.4)
 
-        # Right: aggregated Q–Q plot with ±1σ error bars
         ax1 = axes[1]
         m     = residuals_all[0].size
         probs = (np.arange(1, m+1) - 0.5) / m
@@ -444,6 +519,7 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
         plt.tight_layout()
         plt.show()
     
+    # Correlation Matrix Heatmap
     if corr_matrix_all is None or len(corr_matrix_all) == 0 or corr_matrix_all == []:
         print("No correlation matrix data available for plotting.")
     else:

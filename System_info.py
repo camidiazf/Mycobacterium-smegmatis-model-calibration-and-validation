@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
 
+""" 
+System information for DAE system model calibration and validation.
+This module contains the system parameters, initial conditions, experimental data,
+and other constants required for the DAE system simulations.
+"""
+
 
 # Variable names
 var_names = ['X', 'C', 'N', 'pH']

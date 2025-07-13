@@ -13,11 +13,8 @@ def DAE_system(t, x, z, params):
         - x: state variables.
         - z: algebraic variables.
         - params: dictionary of parameters.
-        - constants: dictionary of constants.
     Returns:
         - dXdt: vector of differential equations.
-    
-    
     """
     constants = system_data['constants']
     # State variables
@@ -50,10 +47,6 @@ def DAE_system(t, x, z, params):
     return ca.vertcat(dXdt, dCdt, dNdt, dCO2dt, dOdt)
 
 
-
-
-    
-
 def DAE_system_calibrating(t, x, z, p, parameters, param_list):
     """
     Function to define the DAE system for calibration.
@@ -63,7 +56,6 @@ def DAE_system_calibrating(t, x, z, p, parameters, param_list):
         - z: algebraic variables.
         - p: parameters to calibrate.
         - parameters: dictionary of fixed parameters.
-        - constants: dictionary of constants.
         - param_list: list of parameter names to calibrate.
     Returns:
         - dXdt: vector of differential equations.
@@ -74,8 +66,6 @@ def DAE_system_calibrating(t, x, z, p, parameters, param_list):
     3. Computes the algebraic variable based on the provided parameters.
     4. Defines the differential equations for the system.
     5. Returns the vector of differential equations.
-
-
 
     """
     constants = system_data['constants']
@@ -118,7 +108,6 @@ def simulate_model(simulation_type, x0, parameters, time, p_vars=None, param_lis
         - simulation_type: 'calibrating' or 'normal'.
         - x0: initial conditions for the state variables.
         - parameters: dictionary of fixed parameters.
-        - constants: dictionary of constants.
         - time: time vector for the simulation.
         - p_vars: parameters to calibrate (only for 'calibrating' type).
         - param_list: list of parameter names to calibrate (only for 'calibrating' type).
@@ -162,7 +151,6 @@ def simulate_model(simulation_type, x0, parameters, time, p_vars=None, param_lis
     # CasADi function
     f = ca.Function('f', [t, x, z], [dxdt])
     
-
     # ODE system
     dae = {'t': t, 'x': x, 'z': z, 'ode': f(t, x, z), 'alg': f_z}
     integrator = ca.integrator('integrator', 'idas', dae, {'grid': time, 'output_t0': True})
@@ -215,32 +203,3 @@ def simulate_model(simulation_type, x0, parameters, time, p_vars=None, param_lis
     # Create DataFrame with results
     df_results = pd.DataFrame(dict_results)
     return df_results
-
-def define_cost_function(var_names, params_list):
-    x0_exp = system_data['x0_exp']
-    parameters_og = system_data['parameters_og']
-    t_exp = system_data['t_exp']
-    df_exp = system_data['df_exp']
-
-    def cost_function(p_vars): # COST FUNCTION USING PE DATA
-        try:
-            df_results = simulate_model(simulation_type='calibrating', 
-                                        x0=x0_exp, 
-                                        parameters=parameters_og, 
-                                        time=t_exp,
-                                        p_vars=p_vars,
-                                        param_list=params_list
-                                    )
-            
-            err = 0
-            for var in var_names:
-                var_new = df_results[var]
-                var_exp = df_exp[var]
-
-                err += np.sum((var_new - var_exp)**2)
-        
-            return err
-        except:
-            err = 1e6
-            return err
-    return cost_function
