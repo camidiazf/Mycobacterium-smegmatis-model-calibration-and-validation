@@ -1,0 +1,9 @@
+casadi
+numpy
+pandas
+scipy
+matplotlib
+seaborn
+statsmodels
+mealpy
+openpyxl
