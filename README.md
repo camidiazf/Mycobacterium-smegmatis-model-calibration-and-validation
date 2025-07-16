@@ -68,21 +68,22 @@ pip install -r requirements.txt
 
 ```
 .
-├── Analysis_functions.py        # Post-processing: t-values, CIs, goodness-of-fit, residual stats
-├── Aux_Functions.py             # Helper utilities: plotting routines, statistical tools, FIM, I/O
-├── Dae_System_run.py            # CLI/API: orchestrates loading, calibration, simulation & report export
-├── Dae_Systems_Simulations.py   # CasADi-based DAE definitions, solver setup, integration functions
-├── Experimental_data.xlsx       # Tabular experimental measurements for calibration/validation
-├── Main.ipynb                   # Jupyter notebook: step-by-step local pipeline walkthrough
-├── Main_Collab.ipynb            # Google Colab notebook: reproduce pipeline in the cloud
-├── System_info.py               # User configurations: parameter names, bounds, ICs, solver tolerances
-├── requirements.txt             # Python package requirements (pip-format)
-└── README.md                    # Project overview and instructions (this file)
+├── Analysis_functions.py                        # Post-processing: t-values, CIs, goodness-of-fit, residual stats
+├── Aux_Functions.py                             # Helper utilities: plotting routines, statistical tools, FIM, I/O
+├── Dae_Systems_Simulations.py                   # CasADi-based DAE definitions, solver setup, integration functions
+├── Experimental_data.xlsx                       # Tabular experimental measurements for calibration/validation
+├── Main.ipynb                                   # Jupyter notebook: step-by-step local pipeline walkthrough
+├── Main_Collab.ipynb                            # Google Colab notebook: reproduce pipeline in the cloud
+├── Mycobacterium_smegmatis_Calibratrion.ipynb   # Results for Model Calibrations
+├── RUN_functions.py                             # Functions that run main processes and call other python files.
+├── System_info.py                               # User configurations: parameter names, bounds, ICs, solver tolerances
+├── requirements.txt                             # Python package requirements (pip-format)
+└── README.md                                    # Project overview and instructions (this file)
 ```
 
 ---
 
-## Installation
+## Installation if Running on Computer
 
 Install all required packages via pip:
 
@@ -190,7 +191,7 @@ The main orchestration layer: loops over parameter combinations, calls PSO, and 
   Context manager to silence PSO optimizer stdout/stderr during calibration.
 
 - **`RUN_PARAMETERS_ITERATIONS`**  
-  Top-level driver that enumerates all subsets of parameters and bounds, runs each scenario through PSO, and writes results to an Excel file.
+  Top-level driver that runs each scenario through PSO, according to the numer of iterations set by the user, and writes results to an Excel file.
 
 - **`RUN_INITIAL`**  
   Executes a single analysis pass using the original parameter set, formats and returns its results for inclusion as the “baseline” row.
@@ -243,7 +244,7 @@ openpyxl
   _Enhanced modeling of a Mycobacterium smegmatis batch cultivation._  
   Unpublished manuscript.
 
-
+- New manuscript in progress.
 ---
 
 ## Acknowledgments
@@ -252,8 +253,7 @@ openpyxl
 
 ---
 ## Notes
-- Working on making a faster running code
 - Working on adding folders for images made, to save them for each iteration
 - Working on adding more solver options
+- Some function comments have to be updated
 
-- Final manuscript in progress...
