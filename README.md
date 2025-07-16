@@ -74,7 +74,7 @@ pip install -r requirements.txt
 ├── Experimental_data.xlsx                       # Tabular experimental measurements for calibration/validation
 ├── Main.ipynb                                   # Jupyter notebook: step-by-step local pipeline walkthrough
 ├── Main_Collab.ipynb                            # Google Colab notebook: reproduce pipeline in the cloud
-├── Mycobacterium_smegmatis_Calibratrion.ipynb   # Results for Model Calibrations
+├── Mycobacterium_smegmatis_Calibration.ipynb   # Results for Model Calibrations
 ├── RUN_functions.py                             # Functions that run main processes and call other python files.
 ├── System_info.py                               # User configurations: parameter names, bounds, ICs, solver tolerances
 ├── requirements.txt                             # Python package requirements (pip-format)
@@ -256,4 +256,3 @@ openpyxl
 - Working on adding folders for images made, to save them for each iteration
 - Working on adding more solver options
 - Some function comments have to be updated
-
