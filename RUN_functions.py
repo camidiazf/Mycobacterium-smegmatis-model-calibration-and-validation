@@ -39,9 +39,7 @@ def suppress_all_output():
 
 
 
-
-
-def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
+def RUN_PARAMETERS_ITERATIONS(iterations, path, params_list, lb, ub, new_og = None):
     """
     Parameters:
         - n: int, number of iterations for each parameter combination
@@ -69,13 +67,25 @@ def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
     df = pd.DataFrame()
     print(">>> Starting with empty DataFrame")
 
+
     parameters_og = system_data['parameters']
+    parameters_og_new = {}
+    if new_og is not None:
+        for key, value in parameters_og.items():
+            if key in list(new_og.keys()):
+                parameters_og_new[key] = new_og[key]
+            else:
+                parameters_og_new[key] = value
+    else:
+        parameters_og_new = parameters_og.copy()
+    print(parameters_og_new)
+            
 
     column_names = []
 
     columns_values = []
     columns_t_values = []
-    for key, value in parameters_og.items():
+    for key, value in parameters_og_new.items():
         columns_values.append(key)
         columns_t_values.append('t_value_'+ key)
 
@@ -94,55 +104,41 @@ def RUN_PARAMETERS_ITERATIONS(n, path, params_list, param_ranges):
 
     df = pd.DataFrame(columns=column_names)
 
-    initial_results = RUN_INITIAL()
+    initial_results = RUN_INITIAL(new_og=new_og)
     row_data = ['Original', '', '','']
     row_data.extend(initial_results)
     df.loc[len(df)] = row_data
     df.to_excel(path, index=False)
     print(f">>> Row {len(df)} written to file")
 
-    j = 0
-    for r in range(1, len(params_list) + 1):
-        param_subsets = list(itertools.combinations(params_list, r))
-        for param_combo in param_subsets:
-            indices = [params_list.index(p) for p in param_combo]
-            pair_lists = [
-                [(a, b) for a, b in itertools.product(param_ranges[p], param_ranges[p]) if a < b]
-                for p in param_combo
-            ]
-            all_bound_combos = list(itertools.product(*pair_lists))
-
-            for combo in all_bound_combos:
-                lb = [pair[0] for pair in combo]
-                ub = [pair[1] for pair in combo]
-                print(' ')
-                # print(' ')
-                # print(' ')
-                print(f"\n>>> RUN_SCENARIO with parameters: {param_combo}")
-                print(f"    lb = {format_number(lb)}")
-                print(f"    ub = {format_number(ub)}")
-                # print(' ')
-
-                final_results_escenario = RUN_SCENARIO(iterations=n,
-                                        params_list=list(param_combo),
-                                        lb=lb,
-                                        ub=ub
-                                        )
-                scenario_rows = []
-                for g in range(len(final_results_escenario)):
-                    row_data = [f"Model_{r}_iteration_{g+1}", str(param_combo), str(format_number(lb)), str(format_number(ub))]
-                    row_data.extend(final_results_escenario[g])
-                    scenario_rows.append(row_data)
     
-                df = pd.concat([df, pd.DataFrame(scenario_rows, columns=df.columns)], ignore_index=True)
-                df.to_excel(path, index=False)
-                print(f">>> Row {len(df)} written to file")
-                j += 1
-    print(j)
+    print(f"\n>>> RUN_SCENARIO with parameters: {params_list}")
+    print(f"    lb = {format_number(lb)}")
+    print(f"    ub = {format_number(ub)}")
+
+        # print(' ')
+    final_results_escenario = RUN_SCENARIO(iterations=iterations,
+                            params_list=list(params_list),
+                            lb=lb,
+                            ub=ub,
+                            new_og=new_og
+                            )
+    scenario_rows = []
+    for g in range(len(final_results_escenario)):
+        row_data = [f"Model_iteration_{g+1}", str(params_list), str(format_number(lb)), str(format_number(ub))]
+        row_data.extend(final_results_escenario[g])
+        scenario_rows.append(row_data)
+
+    df = pd.concat([df, pd.DataFrame(scenario_rows, columns=df.columns)], ignore_index=True)
+    df.to_excel(path, index=False)
+    print(f">>> Row {len(df)} written to file")
 
     return df
+
+
+
     
-def RUN_INITIAL():
+def RUN_INITIAL(new_og=None):
     """ 
     Runs the initial model with original parameters and returns the results.
     This function retrieves the original parameters from the system data, runs the analysis,
@@ -158,19 +154,30 @@ def RUN_INITIAL():
 
     """
     parameters_og = system_data['parameters']
-    parameters_og_list = system_data['parameters_og_list']
+    parameters_og_new = {}
+    if new_og is not None:
+        for key, value in parameters_og.items():
+            if key in list(new_og.keys()):
+                parameters_og_new[key] = new_og[key]
+            else:
+                parameters_og_new[key] = value
+    else:
+        parameters_og_new = parameters_og.copy()
+    parameters_og_new_list = list(parameters_og_new.keys())
+
 
     print(" ")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print("----------------------------------------------------- ORIGINAL MODEL -----------------------------------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
+    print("-----------------------------------------------------------------------------------------------------")
+    print("------------------------------------------ ORIGINAL MODEL -------------------------------------------")
+    print("-----------------------------------------------------------------------------------------------------")
     print(" ")
 
-    parameters_og_values = [parameters_og[key] for key in parameters_og_list]
+    parameters_og_values = [parameters_og_new[key] for key in parameters_og_new_list]
 
     ANALYSIS_RESULTS = RUN_ANALYSIS(iteration = None,
-                                    parameters=parameters_og,
-                                    params_list=parameters_og_list)
+                                    parameters=parameters_og_new,
+                                    params_list=parameters_og_new_list,
+                                    new_og=new_og)
     
     validation_results = ANALYSIS_RESULTS['validation_results']
     t_values = ANALYSIS_RESULTS['t_values']
@@ -184,7 +191,7 @@ def RUN_INITIAL():
 
     return final_results_initial
 
-def RUN_SCENARIO(iterations, params_list, lb, ub):
+def RUN_SCENARIO(iterations, params_list, lb, ub, new_og = None):
     """ 
     Runs the scenario for parameter calibration and validation using PSO optimization.
     Parameters:
@@ -212,13 +219,15 @@ def RUN_SCENARIO(iterations, params_list, lb, ub):
     for i in range(iterations):
         print("")
         print("")
-        print(f"                                 ...... Running iteration {i+1} of {iterations} ......                                   ")
+        print(f"                                 ...... Running iteration {i+1} ......                                   ")
         print("")
         
         Results = RUN_PSO_CALIBRATION(iteration = i, 
                                 params_list = params_list,
                                 lb = lb,
-                                ub = ub)
+                                ub = ub,
+                                new_og=new_og)
+                                
         final_result_iteration = Results['FINAL RESULTS']
         final_results_escenario.append(final_result_iteration)
         sensitivity_df = Results['SENSITIVITY']
@@ -243,11 +252,11 @@ def RUN_SCENARIO(iterations, params_list, lb, ub):
     print(" ")
 
 
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print(f"------------------------------- SUMMARY OF {params_list} CALIBRATION --------------------------------------------")
-    print(f"------------------------------- Lower Bounds: {lb} ----------------------------------------------------------")
-    print(f"------------------------------- Upper Bounds: {ub} ----------------------------------------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------")
+    print(f"---------------------- SUMMARY OF {params_list} CALIBRATION -----------------------------------")
+    print(f"---------------------- Lower Bounds: {lb} -------------------------------------------------")
+    print(f"---------------------- Upper Bounds: {ub} -------------------------------------------------")
+    print("--------------------------------------------------------------------------------------------------------")
     print(" ")
 
     RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all)
@@ -255,7 +264,9 @@ def RUN_SCENARIO(iterations, params_list, lb, ub):
     return final_results_escenario
 
 
-def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
+
+
+def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub, new_og=None):
     """
     Runs the PSO optimization for parameter calibration and validation.
     Parameters:
@@ -279,16 +290,25 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
     """
 
     parameters_og = system_data['parameters']
-    parameters_og_list = system_data['parameters_og_list']
+    parameters_og_new = {}
+    if new_og is not None:
+        for key, value in parameters_og.items():
+            if key in list(new_og.keys()):
+                parameters_og_new[key] = new_og[key]
+            else:
+                parameters_og_new[key] = value
+    else:
+        parameters_og_new = parameters_og.copy()
+    parameters_og_new_list = list(parameters_og_new.keys())
 
     print(" ")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print(f"------------------------ PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} -------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
+    print("------------------------------------------------------------------------------------------------------------")
+    print(f"----------------- PSO OPTIMIZATION FOR PARAMETER CALIBRATION | Iteration {iteration + 1} ------------------")
+    print("------------------------------------------------------------------------------------------------------------")
     print(" ")
 
     problem = {
-    "obj_func": define_cost_function(params_list=params_list),
+    "obj_func": define_cost_function(params_list=params_list, new_og=new_og),
     "bounds": FloatVar(lb=lb, ub=ub),
     "minmax": "min"
     }
@@ -307,20 +327,21 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
     print(f"     Optimization Time: {end - start:.2f} s")
 
     print(" ")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print(f"--------------------------------------------- NEW PARAMETERS MODEL {iteration +1} -------------------------------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
+    print("------------------------------------------------------------------------------------------------------------")
+    print(f"-------------------------------------- NEW PARAMETERS MODEL {iteration +1} ------------------------------------------")
+    print("------------------------------------------------------------------------------------------------------------")
     print(" ")
     
     new_params = g_best.solution
     new_params_dict = dict(zip(params_list, new_params))
-    parameters_updated = copy.deepcopy(parameters_og)
+    
+    parameters_updated = copy.deepcopy(parameters_og_new)
     
     parameters_values = []
     i_param = 0
-    for param in parameters_og_list:
+    for param in parameters_og_new_list:
         if param not in params_list:
-            parameters_updated[param] = parameters_og[param]
+            parameters_updated[param] = parameters_og_new[param]
             parameters_values.append(None)
         else:
             new_value = new_params_dict[param]
@@ -342,13 +363,14 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
 
     df_new_params = pd.DataFrame({
         "Parameter": params_list,
-        "Original": [parameters_og[key] for key in params_list],
+        "Original": [parameters_og_new[key] for key in params_list],
         "New": [parameters_updated[key] for key in params_list]})
     print(df_new_params)
 
     ANALYSIS_RESULTS = RUN_ANALYSIS(iteration = iteration,
                                     parameters=parameters_updated,
-                                    params_list=params_list)
+                                    params_list=params_list,
+                                    new_og=new_og)
     
     validation_results = ANALYSIS_RESULTS['validation_results']
     validation_results_formatted = [format_number(x) for x in validation_results]
@@ -366,7 +388,7 @@ def RUN_PSO_CALIBRATION(iteration, params_list, lb, ub):
                 'RESIDUALS' : residuals
                 }
 
-def RUN_ANALYSIS(iteration, parameters, params_list):
+def RUN_ANALYSIS(iteration, parameters, params_list, new_og=None):
     """ 
     Runs the validation and parameter analysis for the given parameters.
     Parameters:
@@ -392,7 +414,8 @@ def RUN_ANALYSIS(iteration, parameters, params_list):
     # Run validation analysis, if initial, use original parameters
     val_analysis = validation_analysis(iteration = iteration,
                                         parameters = parameters,
-                                        params_list= params_list)
+                                        params_list= params_list,
+                                        new_og=new_og)
         
     validation_results = val_analysis['Validation results']
     residuals = val_analysis['Residuals']
@@ -550,3 +573,13 @@ def RUN_SUMMARY_ANALYSIS(sensitivity_df_all, corr_matrix_all, residuals_all):
 
         plt.tight_layout()
         plt.show()
+
+        #most correltaed parameters
+        print("Most correlated parameters:")
+        corr_flat = mean_corr.flatten()
+        indices = np.argsort(np.abs(corr_flat))[-10:]  # Get indices of the 10 largest absolute correlations
+        for idx in indices:
+            i, j = np.unravel_index(idx, mean_corr.shape)
+            print(f"{parameters_og_list[i]} ↔ {parameters_og_list[j]}: {mean_corr[i,j]:.2f} ± {std_corr[i,j]:.2f}")
+            
+

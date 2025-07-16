@@ -1,16 +1,19 @@
 import numpy as np
 import pandas as pd
 import copy
-from numpy.linalg import inv
-
+from numpy.linalg import cond, matrix_rank, pinv
+import logging
+from typing import Dict, Optional, Tuple, List
 import matplotlib.pyplot as plt
 import seaborn as sns # type: ignore
 
 from DAE_Systems_Simulations import simulate_model
 from System_info import system_info as system_data
 
+logger = logging.getLogger(__name__)
 
-def define_cost_function(params_list):
+
+def define_cost_function(params_list, new_og=None):
     """
     Function to define the cost function for calibration using experimental data.
     Parameters:
@@ -21,9 +24,21 @@ def define_cost_function(params_list):
     # Load system information
     var_names = system_data['var_names']
     x0_exp = system_data['x0_exp']
-    parameters_og = system_data['parameters']
+
     t_exp = system_data['t_exp']
     df_exp = system_data['df_exp']
+
+    parameters_og = system_data['parameters']
+    parameters_og_new = {}
+    if new_og is not None:
+        for key, value in parameters_og.items():
+            if key in list(new_og.keys()):
+                parameters_og_new[key] = new_og[key]
+            else:
+                parameters_og_new[key] = value
+    else:
+        parameters_og_new = parameters_og.copy()
+    print(parameters_og_new)
 
     def cost_function(p_vars): # COST FUNCTION USING PE DATA
         """
@@ -36,7 +51,7 @@ def define_cost_function(params_list):
         try:
             df_results = simulate_model(simulation_type='calibrating', 
                                         x0=x0_exp, 
-                                        parameters=parameters_og,
+                                        parameters=parameters_og_new,
                                         time=t_exp,
                                         p_vars=p_vars,
                                         param_list=params_list
@@ -157,33 +172,27 @@ def residuals_equations(y_val, y_sim, params_list = None):
 
 
 
-def compute_FIM(iteration, x0, parameters, time_stamps, params_list):
+def compute_FIM(iteration, x0, parameters, time_stamps, params_list, new_og=None):
     """
-    Function to compute the Fisher Information Matrix (FIM) for parameter sensitivity analysis.
+    Compute the Fisher Information Matrix (FIM), parameter correlation matrix, and t-values for sensitivity analysis.
+
     Parameters:
-        - iteration: current iteration number (used for t-values).
-        - x0: initial conditions for the state variables.
-        - parameters: dictionary of model parameters.
-        - time_stamps: time points for the simulation.
-        - params_list: list of parameter names to be calibrated.
-    returns:
-        - FIM: Fisher Information Matrix.
-        - correlation_matrix: correlation matrix of the parameters.
-        - t_values_complete: t-values for the parameters (if iteration is not None).
-        - None: if the simulation fails.
+        x0: Initial state vector.
+        parameters: Dict of all model parameters.
+        time_stamps: Array of time points for simulation.
+        system_data: Dict containing:
+            - 'weights_exp_stack': weights array (n_outputs x 1).
+            - 'parameters_og_list': list of parameter names.
+            - 'delta': perturbation magnitude for finite differences.
+            - 'correlation_threshold': threshold for plotting.
+        sim_plus_minus: Function(key, x0, parameters, time_stamps) -> (sim_plus, sim_minus) or None.
+        compute_t_values: Function(iteration, parameters, params_list, FIM) -> t-values array.
 
-    Steps:
-        1. Load system information.
-        2. Initialize the Fisher Information Matrix (FIM) and Jacobian matrix (J).
-        3. Loop through each parameter in the parameters list.
-        4. Simulate the model with perturbed parameters using `sim_plus_minus`.
-        5. Compute the Jacobian matrix (dY_dp) for the perturbed parameters.
-        6. Compute the FIM by multiplying the Jacobian matrix with its transpose.
-        7. Compute eigenvalues, condition number, and rank of the FIM.
-        8. Compute the correlation matrix from the FIM.
-        9. Compute t-values for the parameters if iteration is not None.
-        10. Return the FIM, correlation matrix, and t-values.
-
+    Returns:
+        Dict with keys:
+            'FIM': FIM matrix or None on failure.
+            'correlation_matrix': Correlation matrix or None.
+            't_values': Array of t-values or None.
     """
 
     print(" ")
@@ -197,33 +206,36 @@ def compute_FIM(iteration, x0, parameters, time_stamps, params_list):
     delta = system_data['delta']
     J = np.zeros((n_outputs, n_params))
 
-    i = 0
-    for key in parameters_og_list:
-        sim_plus_minus_results = sim_plus_minus(key, x0, parameters, time_stamps)
-        if sim_plus_minus_results is None:
-            print(f"!!!!!!!!!!!!!               FIM Analysis for parameter {key} failed. Please check the parameters and initial conditions.")
-            FIM = None
-            return None
-        sim_plus = np.vstack(sim_plus_minus_results[0]).T
-        sim_minus = np.vstack(sim_plus_minus_results[1]).T
-        dY_dp = (sim_plus - sim_minus) / (2 * delta)
-        dY_dp_weighted = dY_dp * weights_exp
+    parameters_og_list = system_data['parameters_og_list']
+    weights_exp = system_data['weights_exp_stack']
+    delta = system_data['delta']
+    n_params = len(parameters_og_list)
+    n_outputs = weights_exp.size
+    J = np.zeros((n_outputs, n_params))
 
-        J[:, i] = dY_dp_weighted.flatten()
-        i += 1
-    
+
+    # Build Jacobian via finite differences
+    for i, key in enumerate(parameters_og_list):
+        result = sim_plus_minus(key, x0, parameters, time_stamps)
+        if result is None:
+            logger.error("Simulation failed for parameter %s", key)
+            return {'FIM': None, 'correlation_matrix': None, 't_values': None}
+        sim_plus, sim_minus = result
+        # Flatten and weight
+        dY_dp = (np.vstack(sim_plus).T - np.vstack(sim_minus).T) / (2 * delta)
+        J[:, i] = (dY_dp * weights_exp).flatten()
+
+    # Compute FIM
     FIM = J.T @ J
+    cond_num = cond(FIM)
+    rank = matrix_rank(FIM)
+    logger.info("FIM condition number: %.2e | rank: %d", cond_num, rank)
 
 
-    eigvals = np.linalg.eigvalsh(FIM)
-    cond_number = np.linalg.cond(FIM)
-    rank = np.linalg.matrix_rank(FIM)
-
-    print(f"FIM condition number: {cond_number:.2e}")
-    print(f"FIM rank: {rank}")
-    print(f"FIM eigenvalues: {eigvals}")
-
+    # Correlation matrix
     corr_matrix = compute_correlation_matrix(FIM)
+
+    # Compute t-values
     t_values_complete = compute_t_values(iteration, parameters, params_list, FIM)
 
     if t_values_complete is None:
@@ -244,43 +256,50 @@ def compute_correlation_matrix(FIM):
     """
     parameters_og_list = system_data['parameters_og_list']
     correlation_threshold = system_data['correlation_threshold']
-    FIM_inv = inv(FIM)
-    corr_matrix = np.zeros_like(FIM)
-
-    for i in range(len(parameters_og_list)):
-        for j in range(len(parameters_og_list)):
-            try:
-                corr_matrix[i, j] = FIM_inv[i, j] / np.sqrt(FIM_inv[i, i] * FIM_inv[j, j])
-                #to catch invalid srqt operations
-            except ValueError:
-                print(f"Invalid sqrt operation for indices ({i}, {j})")
-                corr_matrix[i, j] = None
-
+    # Use pseudo-inverse to handle singular or ill-conditioned FIM
+    FIM_inv = pinv(FIM)
+    # Vectorized computation of correlation matrix
+    var = np.diag(FIM_inv)
+    std = np.sqrt(var)
+    # Avoid division by zero
+    std[std == 0] = np.nan
+    corr_matrix = FIM_inv / (std[:, None] * std[None, :])
+    # Clamp to [-1, 1]
+    corr_matrix = np.clip(corr_matrix, -1.0, 1.0)
+    # Mask invalid entries
+    mask = np.isnan(corr_matrix)
+    # Plot heatmap
     plt.figure(figsize=(12, 9))
     sns.heatmap(
         corr_matrix,
+        mask=mask,
         xticklabels=parameters_og_list,
         yticklabels=parameters_og_list,
         annot=True,
         fmt=".2f",
+        vmin=-1,
+        vmax=1,
         cmap='coolwarm',
         center=0
     )
-    plt.title("Parameter correlation matrix")
+    plt.title("Parameter Correlation Matrix")
     plt.tight_layout()
     plt.show()
 
-    highly_correlated_pairs = []
-
+    # Identify and return highly correlated pairs
+    n = corr_matrix.shape[0]
+    high_pairs: List[Tuple[str, str, float]] = []
+    print(f"\nHighly correlated parameter pairs (|r| > {correlation_threshold}):")
+    high_pairs = []
     for i in range(len(parameters_og_list)):
-        for j in range(i + 1, len(parameters_og_list)):
-            corr_val = corr_matrix[i, j]
-            if abs(corr_val) > correlation_threshold:
-                highly_correlated_pairs.append((parameters_og_list[i], parameters_og_list[j], corr_val))
-
-    print(f"Highly correlated parameter pairs (|ρ| > {correlation_threshold}):\n")
-    for p1, p2, corr in highly_correlated_pairs:
-        print(f"{p1:10s} <--> {p2:10s} | correlation: {corr:.4f}")
+        for j in range(i+1, len(parameters_og_list)):
+            val = corr_matrix[i, j]
+            if not np.isnan(val) and abs(val) > correlation_threshold:
+                high_pairs.append((parameters_og_list[i], parameters_og_list[j], val))
+                # note: use the parameter names here, not indexing into the threshold
+                print(f"  {parameters_og_list[i]:<15} <--> {parameters_og_list[j]:<15} | r = {val:.4f}")
+    if not high_pairs:
+        print("  None found.")
 
     return corr_matrix
     
@@ -313,33 +332,34 @@ def compute_t_values(iteration, parameters, params_list, FIM):
     print(" ")
     print("                                              >>>>>>>>>> t-values <<<<<<<<<<                                              ")
     print(" ")
+
     parameters_og_list = system_data['parameters_og_list']
-    if iteration == None:
-        t_values_complete = [None] * len(parameters_og_list)
-    else:
-        params_adjusted = copy.deepcopy(parameters)
-    
-        adjusted_indices = [params_list.index(k) for k in params_list]
+    if iteration is None:
+        return [None] * len(parameters_og_list)
 
-        FIM_adj = FIM[np.ix_(adjusted_indices, adjusted_indices)]
-        Cov_adj = inv(FIM_adj)
+    # Determine indices of calibrated parameters
+    indices = [parameters_og_list.index(p) for p in params_list]
+    FIM_sub = FIM[np.ix_(indices, indices)]
+    cov_sub = pinv(FIM_sub)
 
-        theta_adj = np.array([params_adjusted[k] for k in params_list])
-        try:
-            std_errors = np.sqrt(np.diag(Cov_adj))
-        except RuntimeError as e:
-            print("Error in computing standard errors:", e)
-            return None
-        t_values = theta_adj / std_errors
-        t_values_complete = []
-        for key in parameters_og_list:
-            if key in params_list:
-                t_values_complete.append(t_values[params_list.index(key)])
-            else:
-                t_values_complete.append(None)
-        for k, theta, se, t in zip(params_list, theta_adj, std_errors, t_values):
-            
-            print(f"{k:<10}: θ = {theta:.6f}, SE = {se:.6f}, t-value = {t:.2f}")
+    theta = np.array([parameters[p] for p in params_list])
+    std_err = np.sqrt(np.diag(cov_sub))
+    std_err[std_err == 0] = np.nan
+    t_vals = theta / std_err
+    print("\nComputed t-values for calibrated parameters:")
+    print(f"{'Parameter':<15}{'θ':>12}{'SE':>12}{'t-value':>12}")
+
+    # Print detailed t-values
+    for p, th, se, tv in zip(params_list, theta, std_err, t_vals):
+        print(f"{p:<15}{th:12.6f}{se:12.6f}{tv:12.2f}")
+
+    # Build complete list including None for fixed parameters
+    t_values_complete: List[Optional[float]] = []
+    for lbl in parameters_og_list:
+        if lbl in params_list:
+            t_values_complete.append(float(t_vals[params_list.index(lbl)]))
+        else:
+            t_values_complete.append(None)
     return t_values_complete
 
 

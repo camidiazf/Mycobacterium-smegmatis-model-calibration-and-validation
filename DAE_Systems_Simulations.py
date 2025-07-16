@@ -28,7 +28,7 @@ def DAE_system(t, x, z, params):
 
     # Specific growth rate
     mu = (params['mu_max'] 
-          * (1 - ca.exp(-t / constants['t_lag'])) 
+          * (1 - ca.exp(-t / params['t_lag'])) 
           * (C / (C + params['k_C'])) 
           * (N / (N + params['k_N'])) 
           * (O / (O + params['k_O']))
@@ -42,7 +42,7 @@ def DAE_system(t, x, z, params):
     dCdt   = - (mu / params['YX_C']) * X                                             # Glycerol
     dNdt   = - (mu / params['YX_N']) * X                                             # Ammonia
     dCO2dt = ((mu / params['YX_CO2']) * X) - ka7 * (CO2 / (((10 ** -pH) / ka7) + 1))  # CO2
-    dOdt   = constants['k_La'] * (params['O2_sat'] - O) - (mu / params['YX_O2']) * X    # O2
+    dOdt   = params['k_La'] * (params['O2_sat'] - O) - (mu / params['YX_O2']) * X    # O2
 
     return ca.vertcat(dXdt, dCdt, dNdt, dCO2dt, dOdt)
 
@@ -82,7 +82,7 @@ def DAE_system_calibrating(t, x, z, p, parameters, param_list):
 
     # Specific growth rate
     mu = (globals()['mu_max'] 
-        * (1 - ca.exp(-t / constants['t_lag']))   
+        * (1 - ca.exp(-t / globals()['t_lag']))   
         * (C / (C + globals()['k_C']))   
         * (N / (N + globals()['k_N']))   
         * (O / (O + globals()['k_O']))  
@@ -96,7 +96,7 @@ def DAE_system_calibrating(t, x, z, p, parameters, param_list):
     dCdt   = - (mu / globals()['YX_C']) * X                                                 # Glycerol
     dNdt   = - (mu / globals()['YX_N']) * X                                                 # Ammonia
     dCO2dt = ((mu / globals()['YX_CO2']) * X) - ka7 * (CO2 / (((10 ** -pH) / ka7) + 1))     # CO2
-    dOdt   = constants['k_La'] * (globals()['O2_sat'] - O) - (mu / globals()['YX_O2']) * X  # O2  
+    dOdt   = globals()['k_La'] * (globals()['O2_sat'] - O) - (mu / globals()['YX_O2']) * X  # O2  
 
     return ca.vertcat(dXdt, dCdt, dNdt, dCO2dt, dOdt)
 
@@ -182,7 +182,7 @@ def simulate_model(simulation_type, x0, parameters, time, p_vars=None, param_lis
     mu_values = np.zeros_like(C)
     for i in range(len(C)):
         mu_values[i] = (parameters['mu_max'] *
-            (1 - np.exp(-t[i] / constants['t_lag'])) *
+            (1 - np.exp(-t[i] / parameters['t_lag'])) *
             (C[i] / (C[i] + parameters['k_C'])) *
             (N[i] / (N[i] + parameters['k_N'])) *
             np.exp((parameters['I_val'] *

@@ -22,7 +22,7 @@ colors = {
     } # Not necessary for the simulation, but useful for plotting
 
 # Simulation time parameters
-tf = 50
+tf = 40
 n_steps = 500
 time_stamps_sim = np.linspace(0, tf, n_steps + 1)
 
@@ -42,6 +42,8 @@ parameters = {
     'pH_UL': 7.4,
     'I_val': 3, 
     'O2_sat' : 0.007267,
+    't_lag': 7,
+    'k_La' : 86.26
     } 
 
 parameters_og_list = list(parameters.keys()) 
@@ -59,8 +61,7 @@ constants = {'pka1': 6.86, # pKa of KH2PO4
             'KH2PO4': 2.18,
             'C6H8O7': 2,
             'pH_alk': 7.2,
-            't_lag': 7,
-            'k_La' : 86.26}
+            }
 
 # Experimental data
 df_exp = pd.read_excel('Experimental_data.xlsx', sheet_name='PE_Normal')

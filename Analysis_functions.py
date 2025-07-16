@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from statsmodels.stats.stattools import durbin_watson # type: ignore
+import os
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -11,7 +12,7 @@ from Aux_Functions import compute_sensitivity, compute_FIM, residuals_equations
 from DAE_Systems_Simulations import simulate_model
 
 
-def validation_analysis(iteration, parameters, params_list):
+def validation_analysis(iteration, parameters, params_list, new_og=None):
     """
     Function to perform validation analysis of the DAE system model.
     Parameters:
@@ -72,15 +73,25 @@ def validation_analysis(iteration, parameters, params_list):
         y_s = y_sim[i]
         res_results_var = residuals_equations(y_v, y_s)
         val_results_list.extend(res_results_var)
+        print('\nValidation Results for variable:', estado)
+        print('RMSE: ', res_results_var[0])
+        print('MAPE: ', res_results_var[1])
+        print('NRMSE: ', res_results_var[2])
 
 
     res_results_model = residuals_equations(y_val_c, y_sim_c, params_list)
+
+
 
     # AIC, BIC, RMSE, MAPE y NRMSE por modelo
     val_results_list.extend(res_results_model[0])
 
     print("\nValidation Results:")
     print('AIC: ', res_results_model[0][0])
+    print('BIC: ', res_results_model[0][1])
+    print('RMSE: ', res_results_model[0][2])
+    print('MAPE: ', res_results_model[0][3])
+    print('NRMSE: ', res_results_model[0][4])
     
     residuals = res_results_model[1]
     result = stats.anderson(residuals)
@@ -127,7 +138,9 @@ def validation_analysis(iteration, parameters, params_list):
     # Plotting comparison of original and new parameters with validation data
     plotting_comparison(iteration = iteration, 
                         params_list=params_list,
-                        parameters_updated=parameters)
+                        parameters_updated=parameters,
+                        AIC = res_results_model[0][0],
+                        new_og=new_og)
 
     return {'Validation results': val_results_list,
             'Residuals': residuals}
@@ -181,7 +194,7 @@ def parameter_analysis(iteration, params_list, parameters ):
             'sensitivity': sensitivity} # Return the DataFrame with t-values
 
 
-def plotting_comparison(iteration, params_list, parameters_updated):
+def plotting_comparison(iteration, params_list, parameters_updated, AIC, new_og=None):
     """
     Function to plot the comparison of the original and updated parameters with validation data.
     Parameters:
@@ -195,10 +208,11 @@ def plotting_comparison(iteration, params_list, parameters_updated):
     """
 
     print(" ")
-    print("--------------------------------------------------------------------------------------------------------------------------")
-    print("------------------------------------------ MODEL COMPARISON TO VALIDATION DATA -------------------------------------------")
-    print("--------------------------------------------------------------------------------------------------------------------------")
+    print("----------------------------------------------------------------------------------------------------")
+    print("------------------------------- MODEL COMPARISON TO VALIDATION DATA --------------------------------")
+    print("----------------------------------------------------------------------------------------------------")
     print(" ")
+    
 
         
     def darken_color(color, factor=0.6):
@@ -210,12 +224,23 @@ def plotting_comparison(iteration, params_list, parameters_updated):
     x0_sim_v = system_data['x0_sim_v']
     time_stamps_sim = system_data['time_stamps_sim']
     df_val = system_data['df_val']
-    parameters_og = system_data['parameters']
     t_exp_v = system_data['t_exp_v']
 
+
+    parameters_og = system_data['parameters']
+    parameters_og_new = {}
+    if new_og is not None:
+        for key, value in parameters_og.items():
+            if key in list(new_og.keys()):
+                parameters_og_new[key] = new_og[key]
+            else:
+                parameters_og_new[key] = value
+    else:
+        parameters_og_new = parameters_og.copy()
+    print(parameters_og_new)
     original_sol_v = simulate_model(simulation_type='normal', 
                                     x0=x0_sim_v, 
-                                    parameters=parameters_og, 
+                                    parameters=parameters_og_new, 
                                     time=time_stamps_sim)
 
     if original_sol_v is None:
@@ -232,8 +257,8 @@ def plotting_comparison(iteration, params_list, parameters_updated):
             return None
     
 
-    fig, axes = plt.subplots(len(var_names), 1, figsize=(2*len(var_names), 12))
-
+    fig, axes = plt.subplots(len(var_names), 1, figsize=(14, 14))
+    fig.subplots_adjust(left=0.35, top=0.88, hspace=0.2)
     for i in range(len(var_names)):
         var = var_names[i]
     
@@ -244,11 +269,54 @@ def plotting_comparison(iteration, params_list, parameters_updated):
         axes[i].set_xlabel("Time (h)")
         axes[i].set_ylabel(var)
         axes[i].legend()
+
         axes[i].grid(True)
-    
-    if iteration == None:
-        fig.suptitle(f'Initial Model vs. Validation Data', fontsize=18)
+    textstr = "\n".join(
+        [f"{k}: {v}" for k, v in parameters_updated.items()]
+    )
+    # place it in figure coordinates (0,0 is bottom‐left, 1,1 is top‐right)
+    fig.text(
+        0.15,                # 2% from the left
+        0.6,                 # centered vertically
+        textstr,
+        ha='center',
+        va='center',
+        fontsize=14,         # slightly larger
+        bbox={
+            'boxstyle': 'square,pad=1.0',  # more padding
+            'facecolor': 'white',
+            'alpha': 0.8,
+            'edgecolor': 'none'            # no border
+        }
+    )
+
+    fig.text(
+        0.15,                # same left margin
+        0.4,                # up near the top
+        f"AIC = {AIC:.2f}",
+        ha='center',
+        va='top',
+        fontsize=16,         # big!
+        fontweight='bold'
+    )
+
+
+    if iteration is None:
+        title = ("Initial Model vs. Validation Data")
     else:
-        fig.suptitle(f' New Model fitting {params_list} vs. Validation Data', fontsize=18)
-    plt.tight_layout()
+        title = (f"New Model fitting {params_list} vs. Validation Data")
+    fig.suptitle(
+        title,
+        fontsize=18,
+        linespacing=2,
+        y=0.92      # default is ~0.98; smaller → pulls it down
+    )
+
+    base = "_".join(str(p) for p in params_list)
+    fname = f"Model_fixing_{base}_{iteration}.png"
+
+    # 3) save the figure
+    outpath = os.path.join('Figures_PE_1', fname)
+    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+
     plt.show()
